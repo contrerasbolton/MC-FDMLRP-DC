@@ -90,10 +90,11 @@ void readInstance(const char *instance)
       C[i] = new int[2];
       if(!fscanf(file, "%d\t%d\n", &C[i][0], &C[i][1]))
         printError("reading error in C_" + to_string(i));
-      cout << C[i][0] << " " <<  C[i][1] << endl;
+      //cout << C[i][0] << " " <<  C[i][1] << endl;
     }
   if(!fscanf(file, "%s\n", temp))
     printError("reading error in C");
+  cout << "It is loaded" << endl;
   cout << temp << endl;
   if(!fscanf(file, "%s\n", temp))
     printError("reading error in beta");
@@ -107,12 +108,13 @@ void readInstance(const char *instance)
         {
           if(!fscanf(file, "%d", &beta[i][j]))
             printError("reading error in beta " + to_string(i) + " " + to_string(j));
-          cout << beta[i][j] << " ";
+          // cout << beta[i][j] << " ";
         }
-      cout << endl;
+      // cout << endl;
     }
   if(!fscanf(file, "%s\n", temp))
     printError("reading error in beta");
+  cout << "It is loaded" << endl;
   cout << temp << endl;
 
   if(!fscanf(file, "%s\n", temp))
@@ -130,13 +132,14 @@ void readInstance(const char *instance)
             {
               if(!fscanf(file, "%d", &alpha[d][k][i]))
                 printError("reading error in alpha " + to_string(d) + " " + to_string(k) + " " + to_string(i));
-              cout << alpha[d][k][i] << " ";
+              // cout << alpha[d][k][i] << " ";
             }
-          cout << endl;
+          // cout << endl;
         }
     }
   if(!fscanf(file, "%s\n", temp))
     printError("reading error in beta");
+  cout << "It is loaded" << endl;
   cout << temp << endl;
 
   if(!fscanf(file, "%s\n", temp))
@@ -159,16 +162,14 @@ void readInstance(const char *instance)
             }
           else
             t[i][j] = 99999;
-
-          cout << t[i][j] << " ";
+          // cout << t[i][j] << " ";
         }
-      cout << endl;
+      // cout << endl;
     }
   if(!fscanf(file, "%s\n", temp))
     printError("reading error in t");
+  cout << "It is loaded" << endl;
   cout << temp << endl;
-
-
   fclose(file);
 }
 
@@ -658,7 +659,7 @@ void solveMILP(int opt)
         model.add(x[i][i] == 0);
 
       // Cplex Parameters
-      int timeLimit = 20;
+      int timeLimit = 3600;
       // cplex.exportModel("model.lp");
       cplex.setParam(IloCplex::Threads, 1);
       cplex.setParam(IloCplex::TiLim, timeLimit);
@@ -796,7 +797,7 @@ void solveMILP(int opt)
 
 void ILS()
 {
-
+  cout << "ILS is running" << endl;
 }
 int main(int argc, char *argv[])
 {
@@ -809,7 +810,10 @@ int main(int argc, char *argv[])
   cout << name << endl;
   readInstance(name.c_str());
 
-  solveMILP(opt);
+  if(opt == 6)
+    ILS();
+  else
+    solveMILP(opt);
 
   return 0;
 }
