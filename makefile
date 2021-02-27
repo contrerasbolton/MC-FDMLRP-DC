@@ -27,5 +27,5 @@ $(TARGET): $(OBJ)
 	$(CPP) $(CPPFLAGS) -o $@ $^ $(LFLAGS) $(LIBS)
 
 clean:
-	@rm -f $(TARGET) $(wildcard *~)
+	@rm -f $(TARGET) $(wildcard *~) $(wildcard *#)
 	@rm -rf $(OBJDIR)

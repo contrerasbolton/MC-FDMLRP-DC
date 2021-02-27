@@ -1,12 +1,5 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2; -*- */
-#include <iostream>
-#include <string>
-
-#include <ilcplex/cplex.h>
-#include <ilcplex/ilocplex.h>
-
-using namespace std;
-ILOSTLBEGIN
+#include "ils.hpp"
 
 // Globals variables (parameters)
 int N;
@@ -25,7 +18,9 @@ int ***alpha;
 float **t;
 float distSum;
 string nameInstance;
-
+vector<vector<vector<int> > > a; // simple alpha
+vector<vector<int> > b; // simple beta
+vector<vector<int> > bi; // inverse beta
 void printError(string msg)
 {
   cout << msg << endl;
@@ -90,7 +85,7 @@ void readInstance(const char *instance)
       C[i] = new int[2];
       if(!fscanf(file, "%d\t%d\n", &C[i][0], &C[i][1]))
         printError("reading error in C_" + to_string(i));
-      //cout << C[i][0] << " " <<  C[i][1] << endl;
+      cout << C[i][0] << " " <<  C[i][1] << endl;
     }
   if(!fscanf(file, "%s\n", temp))
     printError("reading error in C");
@@ -101,16 +96,26 @@ void readInstance(const char *instance)
   cout << temp << endl;
 
   beta = new int*[S];
+  for(auto i = 0; i < D; i++)
+    b.push_back(vector<int>());
+
   for(auto i = 0; i < S; i++)
     {
       beta[i] = new int[N];
+      vector<int> aux;
+      cout << i + D << " -> ";
       for(auto j = 0; j < N; j++)
         {
           if(!fscanf(file, "%d", &beta[i][j]))
             printError("reading error in beta " + to_string(i) + " " + to_string(j));
-          // cout << beta[i][j] << " ";
+          if(beta[i][j])
+            {
+              aux.push_back(j);
+              cout << j << " ";
+            }
         }
-      // cout << endl;
+      b.push_back(aux);
+      cout << endl;
     }
   if(!fscanf(file, "%s\n", temp))
     printError("reading error in beta");
@@ -124,18 +129,26 @@ void readInstance(const char *instance)
   alpha = new int**[D];
   for(auto d = 0; d < D; d++)
     {
+      vector<vector<int>> aux;
       alpha[d] = new int*[K];
       for(auto k = 0; k < K; k++)
         {
+          vector<int> aux2;
           alpha[d][k] = new int[N];
           for(auto i = 0; i < N; i++)
             {
               if(!fscanf(file, "%d", &alpha[d][k][i]))
                 printError("reading error in alpha " + to_string(d) + " " + to_string(k) + " " + to_string(i));
-              // cout << alpha[d][k][i] << " ";
+              if(alpha[d][k][i])
+                {
+                  aux2.push_back(i);
+                  cout << d << " " << k << " " << i << endl;
+                }
             }
-          // cout << endl;
+          aux.push_back(aux2);
+          //cout << endl;
         }
+      a.push_back(aux);
     }
   if(!fscanf(file, "%s\n", temp))
     printError("reading error in beta");
@@ -162,15 +175,31 @@ void readInstance(const char *instance)
             }
           else
             t[i][j] = 99999;
-          // cout << t[i][j] << " ";
+          cout << t[i][j] << " ";
         }
-      // cout << endl;
+      cout << endl;
     }
   if(!fscanf(file, "%s\n", temp))
     printError("reading error in t");
   cout << "It is loaded" << endl;
   cout << temp << endl;
   fclose(file);
+  // compute betaInv
+  for(auto i = 0; i < N; i++)
+    bi.push_back(vector<int>());
+
+  for(unsigned i = 0; i < b.size(); i++)
+    for(unsigned j = 0; j < b[i].size(); j++)
+      bi[b[i][j]].push_back(i + D);
+
+  for(unsigned i = 0; i < bi.size(); i++)
+    {
+      cout << i << " -> ";
+
+      for(unsigned j = 0; j < bi[i].size(); j++)
+        cout << bi[i][j] << " ";
+      cout << endl;
+    }
 }
 
 void solveMILP(int opt)
@@ -661,9 +690,9 @@ void solveMILP(int opt)
       // Cplex Parameters
       int timeLimit = 3600;
       // cplex.exportModel("model.lp");
-      cplex.setParam(IloCplex::Threads, 1);
-      cplex.setParam(IloCplex::TiLim, timeLimit);
-
+      cplex.setParam(IloCplex::Param::Threads, 1);
+      cplex.setParam(IloCplex::Param::TimeLimit, timeLimit);
+      cplex.setParam(IloCplex::Param::MIP::Limits::TreeMemory, 4000);
       // Solve
       if(!cplex.solve())
         {
@@ -795,10 +824,15 @@ void solveMILP(int opt)
   env.end();
 }
 
-void ILS()
+void callILS()
 {
   cout << "ILS is running" << endl;
+  int seed = 0;
+  ILS *ils = new ILS(seed, N, D, K, S, B, ND, T, V, a, b, bi, t, mMax, mMin, C);
+  ils->run();
+  delete ils;
 }
+
 int main(int argc, char *argv[])
 {
   cout << "An heuristic for MC-FDMLRP-DC" << endl;
@@ -811,7 +845,7 @@ int main(int argc, char *argv[])
   readInstance(name.c_str());
 
   if(opt == 6)
-    ILS();
+    callILS();
   else
     solveMILP(opt);
 

@@ -4,6 +4,7 @@
 TYPE=$1
 INSTANCE=$2
 I=$3
+J=$4
 
 OUTPUT="output/"
 if [ "$TYPE" = "M1-MTZ" ]
@@ -38,10 +39,10 @@ then
     then
 	start=1
 	end=15
-    elif [ "$I" = "" ]
+    elif [ "$I" != "" ] && [ "$J" != "" ]
     then
-	start=1
-	end=15
+	start=$I
+	end=$J
     else
 	start=$I
 	end=$I
@@ -52,10 +53,10 @@ then
     then
 	start=1
 	end=5
-    elif [ "$I" = "" ]
+    elif [ "$I" != "" ] && [ "$J" != "" ]
     then
-	start=1
-	end=5
+	start=$I
+	end=$J
     else
 	start=$I
 	end=$I
@@ -65,7 +66,7 @@ else
     exit
 fi
 
-for i in $(seq $star $end);
+for i in `seq $start $end`;
 do
     run="./drone $INSTANCE$i.dat $algorithm"
     echo "$run > $OUTPUT$INSTANCE$i"_"$TYPE.txt"
