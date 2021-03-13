@@ -190,7 +190,7 @@ void readInstance(const char *instance)
 
   for(unsigned i = 0; i < b.size(); i++)
     for(unsigned j = 0; j < b[i].size(); j++)
-      bi[b[i][j]].push_back(i + D);
+      bi[b[i][j]].push_back(i);
 
   for(unsigned i = 0; i < bi.size(); i++)
     {
@@ -688,7 +688,7 @@ void solveMILP(int opt)
         model.add(x[i][i] == 0);
 
       // Cplex Parameters
-      int timeLimit = 3600;
+      int timeLimit = 200;
       // cplex.exportModel("model.lp");
       cplex.setParam(IloCplex::Param::Threads, 1);
       cplex.setParam(IloCplex::Param::TimeLimit, timeLimit);
@@ -828,10 +828,26 @@ void callILS()
 {
   cout << "ILS is running" << endl;
   int seed = 0;
-  ILS *ils = new ILS(seed, N, D, K, S, B, ND, T, V, a, b, bi, t, mMax, mMin, C);
+  ILS *ils = new ILS(seed, N, D, K, S, B, beta, ND, T, V, distSum, a, b, bi, t, mMax, mMin, C);
   ils->run();
   delete ils;
 }
+
+void callMatheuristic()
+{
+  cout << "Matheuristic is running" << endl;
+  int seed = 0;
+  ILS *ils = new ILS(seed, N, D, K, S, B, beta, ND, T, V, distSum, a, b, bi, t, mMax, mMin, C);
+  ils->runMH();
+  delete ils;
+}
+
+
+void solveTwoStage(int opt)
+{
+
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -844,7 +860,9 @@ int main(int argc, char *argv[])
   cout << name << endl;
   readInstance(name.c_str());
 
-  if(opt == 6)
+  if(opt == 7)
+    callMatheuristic();
+  else if(opt == 6)
     callILS();
   else
     solveMILP(opt);
