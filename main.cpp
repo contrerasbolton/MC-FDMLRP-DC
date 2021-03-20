@@ -21,6 +21,7 @@ string nameInstance;
 vector<vector<vector<int> > > a; // simple alpha
 vector<vector<int> > b; // simple beta
 vector<vector<int> > bi; // inverse beta
+
 void printError(string msg)
 {
   cout << msg << endl;
@@ -492,7 +493,7 @@ void solveMILP(int opt)
                   if(i != j)
                     {
                       name << "constraint11_" << i << " " << j;
-                      constraint11[c][j] = IloRange(env, -IloInfinity, u[i] - u[j] + t[i][j] - V * (1 - x[i][j]), 0, name.str().c_str());
+                      constraint11[c][j] = IloRange(env, -IloInfinity, u[i] - u[j] + t[i][j] - T * (1 - x[i][j]), 0, name.str().c_str());
                       name.str("");
                       model.add(constraint11[c][j]);
                     }
@@ -550,21 +551,37 @@ void solveMILP(int opt)
             }
           model.add(constraint11);
 
-          IloArray<IloRangeArray> constraint12(env, V);
-          for(auto i = 0; i < V; i++)
+          IloArray<IloRangeArray> constraint12a(env, V);
+          for(auto i = D; i < V; i++)
             {
-              constraint12[i] = IloRangeArray(env, V);
-              for(auto j = 0; j < V; j++)
+              constraint12a[i] = IloRangeArray(env, V);
+              for(auto j = D; j < V; j++)
                 {
                   if(i != j)
                     {
-                      name << "constraint12_" << i << "_" << j;
-                      constraint12[i][j] = IloRange(env, -IloInfinity, g[i][j] - (distSum / 2.0) * x[i][j], 0, name.str().c_str());
+                      name << "constraint12_UB" << i << "_" << j;
+                      constraint12a[i][j] = IloRange(env, -IloInfinity, g[i][j] - T * x[i][j], 0, name.str().c_str());
                       name.str("");
-                      model.add(constraint12[i][j]);
+                      model.add(constraint12a[i][j]);
                     }
                 }
             }
+          IloArray<IloRangeArray> constraint12b(env, V);
+          for(auto i = D; i < V; i++)
+            {
+              constraint12b[i] = IloRangeArray(env, V);
+              for(auto j = D; j < V; j++)
+                {
+                  if(i != j)
+                  {
+                    name << "constraint12_LB_" << i << "_" << j;
+                    constraint12b[i][j] = IloRange(env, 0, g[i][j] - x[i][j] * t[i][j], IloInfinity, name.str().c_str());
+                    name.str("");
+                    model.add(constraint12b[i][j]);
+                  }
+                }
+            }
+
           IloArray<IloRangeArray> constraint13(env, D);
           for(auto i = 0; i < D; i++)
             {
@@ -572,26 +589,25 @@ void solveMILP(int opt)
               for(auto j = 0; j < V; j++)
                 {
                   if(i != j)
-                  {
-                    // model.add(g[i][j] >= x[i][j] * t[i][j]);
-                    name << "constraint13_LB_" << i << "_" << j;
-                    constraint13[i][j] = IloRange(env, 0, g[i][j] - x[i][j] * t[i][j], IloInfinity, name.str().c_str());
-                    name.str("");
-                    model.add(constraint13[i][j]);
+                    {
+                      name << "constraint13_LB_" << i << "_" << j;
+                      constraint13[i][j] = IloRange(env, 0, g[i][j] - x[i][j] * t[i][j], 0, name.str().c_str());
+                      name.str("");
+                      model.add(constraint13[i][j]);
                   }
                 }
             }
 
-          IloArray<IloRangeArray> constraint13b(env, D);
-          for(auto i = 0; i < D; i++)
+          IloArray<IloRangeArray> constraint13b(env, V);
+          for(auto i = 0; i < V; i++)
             {
-              constraint13b[i] = IloRangeArray(env, V);
-              for(auto j = 0; j < V; j++)
+              constraint13b[i] = IloRangeArray(env, D);
+              for(auto j = 0; j < D; j++)
                 {
                   if(i != j)
                   {
                     name << "constraint13_UB_" << i << "_" << j;
-                    constraint13b[i][j] = IloRange(env, -IloInfinity, g[j][i], T, name.str().c_str());
+                    constraint13b[i][j] = IloRange(env, -IloInfinity, g[i][j] - x[i][j] * T, 0, name.str().c_str());
                     name.str("");
                     model.add(constraint13b[i][j]);
                   }
@@ -688,11 +704,11 @@ void solveMILP(int opt)
         model.add(x[i][i] == 0);
 
       // Cplex Parameters
-      int timeLimit = 200;
+      int timeLimit = 3600;
       // cplex.exportModel("model.lp");
       cplex.setParam(IloCplex::Param::Threads, 1);
       cplex.setParam(IloCplex::Param::TimeLimit, timeLimit);
-      cplex.setParam(IloCplex::Param::MIP::Limits::TreeMemory, 4000);
+      cplex.setParam(IloCplex::Param::MIP::Limits::TreeMemory, 5000);
       // Solve
       if(!cplex.solve())
         {
@@ -814,7 +830,7 @@ void solveMILP(int opt)
         }
       fprintf(file, "%s\t%d\t%d\t%d\t%d\t%s\t%f\t%f\t%f\t%d\t%d\t%d\t%d\t%d\t%f\t%f\n",
               nameInstance.c_str(), N, S, D, B, s.c_str(), totalCost, routeCost, B2, totalCover, sumL, sumP, watchtowers, ballons, gap, totalTime);
-
+      fclose(file);
     } catch (IloException& ex) {
     cerr << "Error: " << ex << endl;
   }
@@ -824,13 +840,46 @@ void solveMILP(int opt)
   env.end();
 }
 
-void callILS()
+void callILS(int opt)
 {
   cout << "ILS is running" << endl;
-  int seed = 0;
-  ILS *ils = new ILS(seed, N, D, K, S, B, beta, ND, T, V, distSum, a, b, bi, t, mMax, mMin, C);
-  ils->run();
-  delete ils;
+  // initial cost, cost obtained, computing time
+  float result[3] = {0.0, 0.0, 0.0};
+
+  int nRun = 10;
+  float avg_cost = 0.0, avg_time = 0.0, avg_initcost = 0.0;
+  float min_cost = 9999999.0, min_time = 9999999.0, min_initcost = 9999999.0;
+  for(auto i = 0; i < nRun; i++)
+    {
+      int seed = i;
+      ILS *ils = new ILS(seed, N, D, K, S, B, beta, ND, T, V, distSum, a, b, bi, t, mMax, mMin, C);
+      ils->run(&result[0]);
+      delete ils;
+      avg_initcost += result[0];
+      avg_cost += result[1];
+      avg_time += result[2];
+      min_initcost = (result[0] < min_initcost) ? result[0] : min_initcost;
+      min_cost = (result[1] < min_cost) ? result[1] : min_cost;
+      min_time = (result[2] < min_time) ? result[2] : min_time;
+
+      cout << result[0] << "\t" << result[1] << "\t" << result[2] << endl;
+    }
+  avg_initcost /= nRun;
+  avg_cost /= nRun;
+  avg_time /= nRun;
+  cout << "minInitCost\tavgInitCost\tminCost\tavgCost\ttime" << endl;
+  cout << min_initcost << "\t" << avg_initcost << "\t" << min_cost << "\t" << avg_cost << "\t" << avg_time << endl;
+  FILE *file;
+  stringstream ss;
+  string s;
+  string output = "summary_" + to_string(opt) + ".txt";
+  if((file = fopen(output.c_str(), "a")) == NULL)
+    {
+      printf("Error in reading of the %s \n", output.c_str());
+      exit(0);
+    }
+  fprintf(file, "%s\t%f\t%f\t%f\t%f\t%f\n", nameInstance.c_str(), min_initcost, avg_initcost, min_cost, avg_cost, avg_time);
+  fclose(file);
 }
 
 void callMatheuristic()
@@ -863,7 +912,7 @@ int main(int argc, char *argv[])
   if(opt == 7)
     callMatheuristic();
   else if(opt == 6)
-    callILS();
+    callILS(opt);
   else
     solveMILP(opt);
 
