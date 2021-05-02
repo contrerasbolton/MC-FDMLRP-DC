@@ -3,8 +3,11 @@
 
 // Globals variables (parameters)
 int N;
+int We;
+int W;
 int D;
-int K;
+int K; // eliminar
+int WD;
 int S;
 int B;
 int ND;
@@ -12,15 +15,23 @@ float T;
 int V;
 int *mMax;
 int *mMin;
-int **C;
+float *techCost;
+int *WTe;
+float **C;
 int **beta;
-int ***alpha;
+int **alpha;
 float **t;
 float distSum;
 string nameInstance;
 vector<vector<vector<int> > > a; // simple alpha
+vector<vector<int> > a2; // simple alpha
 vector<vector<int> > b; // simple beta
 vector<vector<int> > bi; // inverse beta
+
+// Input parameters
+int seed;
+int timeLimit;
+int memoryLimit;
 
 void printError(string msg)
 {
@@ -31,160 +42,95 @@ void printError(string msg)
 void readInstance(const char *instance)
 {
   FILE *file;
-  char temp[100];
+  //char temp[100];
+  int temp = 0;
   if((file = fopen(instance, "r")) == NULL)
     printError("Error in reading of the instance " + string(instance));
 
-  /* reading n */
-  if(!fscanf(file, "N=%d;\n", &N))
-    printError("reading error in N");
-  /* reading d */
-  if(!fscanf(file, "D=%d;\n", &D))
-    printError("reading error in D");
-  /* reading k */
-  if(!fscanf(file, "K=%d;\n", &K))
-    printError("reading error in K");
-  /* reading s */
-  if(!fscanf(file, "S=%d;\n", &S))
-    printError("reading error in s");
-  /* reading B */
-  if(!fscanf(file, "B=%d;\n", &B))
-    printError("reading error in B");
+  /* reading N D We W S */
+  if(!fscanf(file, "%d %d %d %d %d", &N, &D, &We, &W, &S))
+    printError("reading error in N, W, D, S");
 
+  WD = D + We + W;
+
+  K = 1;
   mMax = new int[K];
   mMin = new int[K];
-  /* reading min m_k */
-  if(!fscanf(file, "M=[%d %d];\n", &mMin[0], &mMin[1]))
-    printError("reading error in m Min");
-  /* reading min m_k */
-  if(!fscanf(file, "MM=[%d %d];\n", &mMax[0], &mMax[1]))
-    printError("reading error in m Max");
-  /* reading ND */
-  if(!fscanf(file, "ND=%d;\n", &ND))
-    printError("reading error in ND");
-  /* reading T */
-  if(!fscanf(file, "T=%f;\n", &T))
-    printError("reading error in T");
-  /* reading C */
-  if(!fscanf(file, "%s\n", temp))
-    printError("reading error in C");
+  if(!fscanf(file, "%d %f %d %d", &ND, &T, &mMin[0], &mMax[0]))
+    printError("reading error in ND, T, Min and Max of watchtowers/ballons ");
 
-  cout << "N = " << N << endl;
-  cout << "D = " << D << endl;
-  cout << "k = " << K << endl;
-  cout << "S = " << S << endl;
-  cout << "B = " << B << endl;
-  cout << "m min = " << mMin[0] << " " << mMin[1] << endl;
-  cout << "m max = " << mMax[0] << " " << mMax[1] << endl;
-  cout << "ND = " << ND << endl;
-  cout << "T = " << T << endl;
+  techCost = new float[4]; // Cost = {Watchtowers, Ballons, ?, drone}
+  if(!fscanf(file, "%f %f %f %f", &techCost[0], &techCost[1], &techCost[2], &techCost[3]))
+    printError("reading error in Costs");
 
-  cout << temp << endl;
-  C = new int*[D];
-  for(auto i = 0; i < D; i++)
-    {
-      C[i] = new int[2];
-      if(!fscanf(file, "%d\t%d\n", &C[i][0], &C[i][1]))
-        printError("reading error in C_" + to_string(i));
-      cout << C[i][0] << " " <<  C[i][1] << endl;
-    }
-  if(!fscanf(file, "%s\n", temp))
-    printError("reading error in C");
-  cout << "It is loaded" << endl;
-  cout << temp << endl;
-  if(!fscanf(file, "%s\n", temp))
-    printError("reading error in beta");
-  cout << temp << endl;
+  V = D + We + W + S;
 
-  beta = new int*[S];
-  for(auto i = 0; i < D; i++)
+  for(auto i = 0; i < V; i++)
     b.push_back(vector<int>());
 
-  for(auto i = 0; i < S; i++)
+  for(auto i = 0; i < V; i++)
     {
-      beta[i] = new int[N];
-      vector<int> aux;
-      cout << i + D << " -> ";
-      for(auto j = 0; j < N; j++)
+      int id = 0;
+      int size = 0;
+
+      if(!fscanf(file, "%d %d", &id, &size))
+        printError("reading error in Covered areas: size and id");
+
+
+      for(auto j = 0; j < size; j++)
         {
-          if(!fscanf(file, "%d", &beta[i][j]))
-            printError("reading error in beta " + to_string(i) + " " + to_string(j));
-          if(beta[i][j])
-            {
-              aux.push_back(j);
-              cout << j << " ";
-            }
+          if(!fscanf(file, "%d", &temp))
+            printError("reading error in Covered areas: size and id");
+          b[id].push_back(temp);
         }
-      b.push_back(aux);
-      cout << endl;
     }
-  if(!fscanf(file, "%s\n", temp))
-    printError("reading error in beta");
-  cout << "It is loaded" << endl;
-  cout << temp << endl;
 
-  if(!fscanf(file, "%s\n", temp))
-    printError("reading error in beta");
-  cout << temp << endl;
+  for(auto i = 0; i < WD; i++)
+    a2.push_back(vector<int>());
 
-  alpha = new int**[D];
-  for(auto d = 0; d < D; d++)
-    {
-      vector<vector<int>> aux;
-      alpha[d] = new int*[K];
-      for(auto k = 0; k < K; k++)
-        {
-          vector<int> aux2;
-          alpha[d][k] = new int[N];
-          for(auto i = 0; i < N; i++)
-            {
-              if(!fscanf(file, "%d", &alpha[d][k][i]))
-                printError("reading error in alpha " + to_string(d) + " " + to_string(k) + " " + to_string(i));
-              if(alpha[d][k][i])
-                {
-                  aux2.push_back(i);
-                  cout << d << " " << k << " " << i << endl;
-                }
-            }
-          aux.push_back(aux2);
-          //cout << endl;
-        }
-      a.push_back(aux);
-    }
-  if(!fscanf(file, "%s\n", temp))
-    printError("reading error in beta");
-  cout << "It is loaded" << endl;
-  cout << temp << endl;
-
-  if(!fscanf(file, "%s\n", temp))
-    printError("reading error in t");
-  cout << temp << endl;
-
-  V = D + S;
   t = new float*[V];
-  distSum = 0.0;
   for(auto i = 0; i < V; i++)
     {
       t[i] = new float[V];
       for(auto j = 0; j < V; j++)
         {
-          if(i != j)
-            {
-              if(!fscanf(file, "%f", &t[i][j]))
-                printError("reading error in t " + to_string(i) + " " + to_string(j));
-              distSum += t[i][j];
-            }
-          else
-            t[i][j] = 99999;
-          cout << t[i][j] << " ";
+          if(!fscanf(file, "%f", &t[i][j]))
+            printError("reading error in t " + to_string(i) + " " + to_string(j));
         }
+    }
+
+  cout << N << " " << D << " " << We << " " << W << " " << S << " " <<endl;
+  cout << ND << " " << T << " " << mMin[0] << " " << mMax[0] << endl;
+  cout << techCost[0] << " " << techCost[1] << " " << techCost[2] << " " << techCost[3] << endl;
+  cout << "Node Type, id and areas that are covered:" << endl;
+  for(auto i = 0; i < (int) b.size(); i++)
+    {
+      if(i < D)
+        cout << "D  ";
+      else if (i >= D && i < D + We)
+        cout << "We ";
+      else if (i >= D + We && i < D + We + W)
+        cout << "W  ";
+      else if (i >= WD)
+        cout << "n  ";
+
+      cout << i << ": ";
+      for(unsigned j = 0; j < b[i].size(); j++)
+        cout << b[i][j] << " ";
       cout << endl;
     }
-  if(!fscanf(file, "%s\n", temp))
-    printError("reading error in t");
-  cout << "It is loaded" << endl;
-  cout << temp << endl;
-  fclose(file);
+
+  // create beta
+  beta = new int*[V];
+  for(auto i = 0; i < V; i++)
+    {
+      beta[i] = new int[N];
+      for(auto j = 0; j < N; j++)
+        beta[i][j] = 0;
+      for(unsigned j = 0; j < b[i].size(); j++)
+        beta[i][b[i][j]] = 1;
+    }
+
   // compute betaInv
   for(auto i = 0; i < N; i++)
     bi.push_back(vector<int>());
@@ -193,18 +139,44 @@ void readInstance(const char *instance)
     for(unsigned j = 0; j < b[i].size(); j++)
       bi[b[i][j]].push_back(i);
 
+  C = new float*[WD];
+  for(auto i = 0; i < WD; i++)
+    {
+      C[i] = new float[4];
+      C[i][0] = techCost[0];
+      C[i][1] = techCost[1];
+      C[i][2] = techCost[2];
+      C[i][3] = techCost[3];
+    }
+
+  // for(auto i = 0; i < S; i++)
+  //   {
+  //     for(auto j = 0; j < N; j++)
+  //       cout << beta[i][j] << " ";
+  //     cout << endl;
+  //   }
+
+  cout << "Area id and its covered nodes:" << endl;
   for(unsigned i = 0; i < bi.size(); i++)
     {
-      cout << i << " -> ";
-
+      cout << i << ": ";
       for(unsigned j = 0; j < bi[i].size(); j++)
         cout << bi[i][j] << " ";
       cout << endl;
     }
+
+  // for(auto i = 0; i < V; i++)
+  //   {
+  //     for(auto j = 0; j < V; j++)
+  //       cout << t[i][j] << " ";
+  //     cout << endl;
+  //   }
+  cout << "reading is ok" << endl;
 }
 
 void solveMILP(int opt)
 {
+  float costUAV = 0.02;
   IloEnv env;
   try
     {
@@ -246,7 +218,13 @@ void solveMILP(int opt)
 
       if(opt % 2 == 0)
         {
-          for(auto i = 0; i < V; i++)
+          for(auto i = 0; i < D; i++)
+            {
+              name << "u_" << i;
+              u[i] = IloNumVar(env, 0, 0, IloNumVar::Float, name.str().c_str());
+              name.str("");
+            }
+          for(auto i = D; i < V; i++)
             {
               name << "u_" << i;
               u[i] = IloNumVar(env, 0, IloInfinity, IloNumVar::Float, name.str().c_str());
@@ -277,16 +255,12 @@ void solveMILP(int opt)
         }
 
       // decision variables y
-      IloArray<IloNumVarArray> y(env, D);
-      for(auto d = 0; d < D; d++)
+      IloNumVarArray y(env, WD);
+      for(auto d = 0; d < WD; d++)
         {
-          y[d] = IloNumVarArray(env, N);
-          for(auto k = 0; k < K; k++)
-            {
-              name << "y_" << d << "_" << k;
-              y[d][k] = IloNumVar(env, 0, 1, IloNumVar::Bool, name.str().c_str());
-              name.str("");
-            }
+          name << "y_" << d;
+          y[d] = IloNumVar(env, 0, 1, IloNumVar::Bool, name.str().c_str());
+          name.str("");
         }
 
       // decision variables x
@@ -313,151 +287,165 @@ void solveMILP(int opt)
         }
       else if(opt == 2 || opt == 3) // Model 2
         {
-          // Another function objetive: min route cost
+          // Another function objetive: min drones cost + ballons cost + tower cost
           IloExpr fo(env);
-          for(auto i = 0; i < V; i++)
-            for(auto j = 0; j < V; j++)
-              if(i != j)
-                fo += t[i][j] * x[i][j];
+
+          // drones cost
+          for(auto d = D; d < WD; d++)
+            for(auto j = WD; j < V; j++)
+              fo += techCost[3] * x[d][j];
+
+          // ballons cost
+          for(auto d = 0; d < D; d++)
+            fo += y[d] * techCost[1];
+
+          // tower cost
+          for(auto d = D + We; d < WD; d++)
+            fo += y[d] * techCost[0];
 
           model.add(IloMinimize(env, fo));
         }
       else // Model 3
         {
-          // Another function objective: min route cost
+          // Another function objective: min (route cost + drones cost + ballons cost + tower cost)
           IloExpr fo(env);
-          for(auto i = 0; i < V; i++)
-            for(auto j = 0; j < V; j++)
-              if(i != j)
-                fo += t[i][j] * x[i][j];
 
+          // route cost
+          for(auto i = D; i < V; i++)
+            for(auto j = D; j < V; j++)
+              if(i != j)
+                fo += costUAV * t[i][j] * x[i][j];
+
+          // drones cost
+          for(auto d = D; d < WD; d++)
+            for(auto j = WD; j < V; j++)
+              fo += techCost[3] * x[d][j];
+
+          // ballons cost
           for(auto d = 0; d < D; d++)
-            for(auto k = 0; k < K; k++)
-              fo += y[d][k] * C[d][k];
+            fo += y[d] * techCost[1];
+
+          // tower cost
+          for(auto d = D + We; d < WD; d++)
+            fo += y[d] * techCost[0];
+
           model.add(IloMinimize(env, fo));
         }
 
-      // Location-covering constraints
-      // Constraints 2) \Sum_{d in D} \Sum_{k in K} alpha_{dki} * y_{dk} >= L_i
-      IloRangeArray constraint2(env, N);
-      for(auto i = 0; i < N; i++)
-        {
-          IloExpr exp(env);
-          for(auto d = 0; d < D; d++)
-            for(auto k = 0; k < K; k++)
-              exp += alpha[d][k][i] * y[d][k];
-          exp -= L[i];
-          name << "constraint2_" << i;
-          constraint2[i] = IloRange(env, 0, exp, IloInfinity, name.str().c_str());
-          name.str("");
-        }
-      model.add(constraint2);
-
       if(opt == 0 || opt == 1)
         {
-          // Constraints 3) \Sum_{d in D} \Sum_{k in K}  y_{dk} <= B, for all i in N
-          IloRangeArray constraint3(env, 1);
+          B = 200;
+          // Constraints 2) \Sum_{d in D} \Sum_{k in K}  y_{dk} <= B, for all i in N
+          IloRangeArray constraint2(env, 1);
           IloExpr exp(env);
+
+          // drones cost
+          for(auto d = D; d < WD; d++)
+            for(auto j = WD; j < V; j++)
+              exp += techCost[3] * x[d][j];
+
+          // ballons cost
           for(auto d = 0; d < D; d++)
-            for(auto k = 0; k < K; k++)
-              exp += y[d][k] * C[d][k];
-          name << "constraint3";
-          constraint3[0] = IloRange(env, -IloInfinity, exp, B, name.str().c_str());
+            exp += y[d] * techCost[1];
+
+          // tower cost
+          for(auto d = D + We; d < WD; d++)
+            exp += y[d] * techCost[0];
+
+          name << "constraint2";
+          constraint2[0] = IloRange(env, -IloInfinity, exp, B, name.str().c_str());
           name.str("");
-          model.add(constraint3);
+          model.add(constraint2);
         }
       else
         {
-          // original function objective is became to constraint
-          // Constraints 3) \Sum_{i in N} L_i + L_i == N
-          IloRangeArray constraint3(env, 1);
+          // Original function objective is became to constraint
+          // Constraints 2) \Sum_{i in N} L_i + L_i == N
+          IloRangeArray constraint2(env, 1);
           IloExpr exp(env);
           for(auto i = 0; i < N; i++)
             exp += L[i] + P[i];
-          name << "constraint3";
-          constraint3[0] = IloRange(env, N, exp, N, name.str().c_str());
+          name << "constraint2";
+          constraint2[0] = IloRange(env, N, exp, N, name.str().c_str());
           name.str("");
-          model.add(constraint3);
+          model.add(constraint2);
         }
 
-      // Constraints 4) \Sum_{d in D} \Sum_{k in K} y_{dk} >= m_k, for all k in K
-      IloRangeArray constraint4(env, K);
-      for(auto k = 0; k < K; k++)
+
+      // Location-covering constraints
+      // Constraints 3) \Sum_{d in D} \Sum_{k in K} alpha_{dki} * y_{dk} >= L_i
+      IloRangeArray constraint3(env, N);
+      for(auto i = 0; i < N; i++)
         {
           IloExpr exp(env);
-          for(auto d = 0; d < D; d++)
-            exp += y[d][k];
-          name << "constraint4_" << k;
-          constraint4[k] = IloRange(env, mMin[k], exp, IloInfinity, name.str().c_str());
+          for(auto d = 0; d < WD; d++)
+            exp += beta[d][i] * y[d];
+          exp -= L[i];
+          name << "constraint3_" << i;
+          constraint3[i] = IloRange(env, 0, exp, IloInfinity, name.str().c_str());
           name.str("");
         }
-      model.add(constraint4);
+      model.add(constraint3);
 
-      // Constraints 5) \Sum_{d in D} y_{dk} <= M_k, for all k in K
-      IloRangeArray constraint5(env, K);
-      for(auto k = 0; k < K; k++)
-      	{
-      	  IloExpr exp(env);
-      	  for(auto d = 0; d < D; d++)
-      	    exp += y[d][k];
-      	  name << "constraint5_" << k;
-      	  constraint5[k] = IloRange(env, -IloInfinity, exp, mMax[k], name.str().c_str());
-      	  name.str("");
-      	}
-      model.add(constraint5);
-
-      // Constraints 6) \Sum_{k in K} y_{dk} <= M_k, for all d in D
-      IloRangeArray constraint6(env, D);
-      for(auto d = 0; d < D; d++)
-      	{
-      	  IloExpr exp(env);
-          for(auto k = 0; k < K; k++)
-      	    exp += y[d][k];
-      	  name << "constraint6_" << d;
-      	  constraint6[d] = IloRange(env, -IloInfinity, exp, 1, name.str().c_str());
-      	  name.str("");
-      	}
-      model.add(constraint6);
+      // Constraints 4) \Sum_{d in D} \Sum_{k in K} y_{dk} >= m_k, for all k in K
+      if(We > 0)
+        {
+          IloRangeArray constraint4(env, We);
+          IloExpr exp1(env);
+          for(auto d = D, c = 0; d < D + We; d++, c++)
+            {
+              exp1 = y[d];
+              name << "constraint4_0_" << d;
+              constraint4[c] = IloRange(env, 1, exp1, 1, name.str().c_str());
+              name.str("");
+              exp1.clear();
+            }
+          model.add(constraint4);
+        }
 
       // Drone routing constraints
       // Constraints 7) \Sum_{k in K} y_{dk} <= M_k, for all d in D
-      IloRangeArray constraint7(env, D);
-      for(auto d = 0; d < D; d++)
+      IloRangeArray constraint7(env, WD - D);
+      for(auto d = D; d < WD; d++)
       	{
       	  IloExpr exp(env);
-          for(auto j = 0; j < V; j++)
+          for(auto j = D; j < V; j++)
             exp += x[d][j];
-          exp -= ND * y[d][0];
+
+          if(d < D)
+            exp -= 0;
+          else
+            exp -= ND * y[d];
       	  name << "constraint7_" << d;
-      	  constraint7[d] = IloRange(env, -IloInfinity, exp, 0, name.str().c_str());
+      	  constraint7[d - D] = IloRange(env, -IloInfinity, exp, 0, name.str().c_str());
       	  name.str("");
       	}
       model.add(constraint7);
 
       // Constraints 8) \Sum_{j in V} x_{dj} - \Sum_{j in V} x_{jd} = 0, for all d in D
-      IloRangeArray constraint8(env, D);
-      for(auto d = 0; d < D; d++)
+      IloRangeArray constraint8(env, WD - D);
+      for(auto d = D; d < WD; d++)
         {
           IloExpr sum1(env);
-          for(auto j = 0; j < V; j++)
+          for(auto j = D; j < V; j++)
             sum1 += x[j][d];
 
           IloExpr sum2(env);
-          for(auto j = 0; j < V; j++)
+          for(auto j = D; j < V; j++)
             sum2 += x[d][j];
 
           name << "constraint8_" << d;
-      	  constraint8[d] = IloRange(env, 0, sum2 - sum1, 0, name.str().c_str());
+      	  constraint8[d - D] = IloRange(env, 0, sum2 - sum1, 0, name.str().c_str());
       	  name.str("");
         }
       model.add(constraint8);
 
       // Constraints 9) \Sum_{j in V} x_{ij} = v_i, for all i in S
       IloRangeArray constraint9(env, S);
-      for(auto i = D, c = 0; i < V; i++, c++)
+      for(auto i = WD, c = 0; i < V; i++, c++)
         {
           IloExpr sum(env);
-          for(auto j = 0; j < V; j++)
+          for(auto j = D; j < V; j++)
             sum += x[i][j];
           sum -= v[c];
           name << "constraint9_" << i;
@@ -468,10 +456,10 @@ void solveMILP(int opt)
 
       // Constraints 10) \Sum_{j in V} x_{ji} = v_i, for all i in S
       IloRangeArray constraint10(env, S);
-      for(auto i = D, c = 0; i < V; i++, c++)
+      for(auto i = WD, c = 0; i < V; i++, c++)
         {
           IloExpr sum(env);
-          for(auto j = 0; j < V; j++)
+          for(auto j = D; j < V; j++)
             sum += x[j][i];
           sum -= v[c];
           name << "constraint10_" << i;
@@ -484,11 +472,11 @@ void solveMILP(int opt)
       if(opt % 2 == 0)
         {
           // Constraints 11) u_i + t_{ij} < = u_j + Q * (1 - x_{ji}), for all i in S, j in V, i != j
-          IloArray<IloRangeArray>  constraint11(env, S);
-          for(auto i = D, c = 0; i < V; i++, c++)
+          IloArray<IloRangeArray>  constraint11(env, V);
+          for(auto i = WD, c = 0; i < V; i++, c++)
             {
               constraint11[c] = IloRangeArray(env, V);
-              for(auto j = 0; j < V; j++)
+              for(auto j = D; j < V; j++)
                 {
                   if(i != j)
                     {
@@ -505,9 +493,9 @@ void solveMILP(int opt)
           for(auto j = 0; j < S; j++)
             {
               IloExpr sum(env);
-              for(auto d = 0; d < D; d++)
-                sum += x[d][j + D] * t[d][j + D];
-              sum = -1 * sum + u[j + D];
+              for(auto d = D; d < WD; d++)
+                sum -= x[d][j + WD] * t[d][j + WD];
+              sum += u[j + WD];
               name << "constraint12_" << j;
               constraint12[j] = IloRange(env, 0, sum, IloInfinity, name.str().c_str());
               name.str("");
@@ -515,11 +503,11 @@ void solveMILP(int opt)
           model.add(constraint12);
 
           // Constraints 13) u_i <= T, for all i in D
-          IloRangeArray constraint13(env, D);
-          for(auto d = 0; d < D; d++)
+          IloRangeArray constraint13(env, WD - D);
+          for(auto d = D; d < WD; d++)
             {
               name << "constraint13_" << d;
-              constraint13[d] = IloRange(env, -IloInfinity, u[d], T, name.str().c_str());
+              constraint13[d - D] = IloRange(env, -IloInfinity, u[d], T, name.str().c_str());
               name.str("");
             }
           model.add(constraint13);
@@ -528,20 +516,20 @@ void solveMILP(int opt)
         {
           // Constraints 11) \Sum_{j in V} g_{ij} - \Sum_{j in V} g_{ji} == \Sum_{j in V} t_{ij} * x_{ij}, for all i in S,x i != j
           IloRangeArray  constraint11(env, S);
-          for(auto i = D, c = 0; i < V; i++, c++)
+          for(auto i = WD, c = 0; i < V; i++, c++)
              {
               IloExpr sum1(env);
-              for(auto j = 0; j < V; j++)
+              for(auto j = D; j < V; j++)
                 if(i != j)
                 sum1 += g[i][j];
 
               IloExpr sum2(env);
-              for(auto j = 0; j < V; j++)
+              for(auto j = D; j < V; j++)
                 if(i != j)
                 sum2 += g[j][i];
 
               IloExpr sum3(env);
-              for(auto j = 0; j < V; j++)
+              for(auto j = D; j < V; j++)
                 if(i != j)
                 sum3 += t[i][j] * x[i][j];
 
@@ -552,10 +540,10 @@ void solveMILP(int opt)
           model.add(constraint11);
 
           IloArray<IloRangeArray> constraint12a(env, V);
-          for(auto i = D; i < V; i++)
+          for(auto i = WD; i < V; i++)
             {
               constraint12a[i] = IloRangeArray(env, V);
-              for(auto j = D; j < V; j++)
+              for(auto j = WD; j < V; j++)
                 {
                   if(i != j)
                     {
@@ -566,11 +554,12 @@ void solveMILP(int opt)
                     }
                 }
             }
+
           IloArray<IloRangeArray> constraint12b(env, V);
-          for(auto i = D; i < V; i++)
+          for(auto i = WD; i < V; i++)
             {
               constraint12b[i] = IloRangeArray(env, V);
-              for(auto j = D; j < V; j++)
+              for(auto j = WD; j < V; j++)
                 {
                   if(i != j)
                   {
@@ -582,11 +571,11 @@ void solveMILP(int opt)
                 }
             }
 
-          IloArray<IloRangeArray> constraint13(env, D);
-          for(auto i = 0; i < D; i++)
+          IloArray<IloRangeArray> constraint13(env, WD);
+          for(auto i = D; i < WD; i++)
             {
               constraint13[i] = IloRangeArray(env, V);
-              for(auto j = 0; j < V; j++)
+              for(auto j = D; j < V; j++)
                 {
                   if(i != j)
                     {
@@ -599,10 +588,10 @@ void solveMILP(int opt)
             }
 
           IloArray<IloRangeArray> constraint13b(env, V);
-          for(auto i = 0; i < V; i++)
+          for(auto i = D; i < V; i++)
             {
-              constraint13b[i] = IloRangeArray(env, D);
-              for(auto j = 0; j < D; j++)
+              constraint13b[i] = IloRangeArray(env, WD);
+              for(auto j = D; j < WD; j++)
                 {
                   if(i != j)
                   {
@@ -620,8 +609,8 @@ void solveMILP(int opt)
       for(auto i = 0; i < N; i++)
         {
           IloExpr exp(env);
-          for(auto j = 0; j < S; j++)
-            exp += beta[j][i] * v[j];
+          for(auto j = WD; j < V; j++)
+            exp += beta[j][i] * v[j - WD];
           exp -= P[i];
           name << "constraint14_" << i;
           constraint14[i] = IloRange(env, 0, exp, IloInfinity, name.str().c_str());
@@ -630,8 +619,8 @@ void solveMILP(int opt)
       model.add(constraint14);
 
       // Constraints 15) w_d = d, for all d in D
-      IloRangeArray constraint15(env, D);
-      for(auto d = 0; d < D; d++)
+      IloRangeArray constraint15(env, WD);
+      for(auto d = 0; d < WD; d++)
         {
           name << "constraint15_" << d;
       	  constraint15[d] = IloRange(env, d, w[d], d, name.str().c_str());
@@ -641,15 +630,15 @@ void solveMILP(int opt)
 
       // Constraints 16) w_i +- w_j < = (D - 1)  * (1 - x_{ji}), for all i in S, j in V, i != j
       IloArray<IloRangeArray> constraint16(env, V);
-      for(auto i = 0; i < V; i++)
+      for(auto i = D; i < V; i++)
         {
           constraint16[i] = IloRangeArray(env, V);
-          for(auto j = 0; j < V; j++)
+          for(auto j = D; j < V; j++)
             {
               if(i != j)
                 {
                   name << "constraint16_" << i << " " << j;
-                  constraint16[i][j] = IloRange(env, -IloInfinity, w[i] - w[j] - (D - 1) * (1 - x[i][j]), 0, name.str().c_str());
+                  constraint16[i][j] = IloRange(env, -IloInfinity, w[i] - w[j] - (WD - 1) * (1 - x[i][j]), 0, name.str().c_str());
                   name.str("");
                   model.add(constraint16[i][j]);
                 }
@@ -658,15 +647,15 @@ void solveMILP(int opt)
 
       // Constraints 17) w_j +- w_i < = (D - 1)  * (1 - x_{ji}), for all i in S, j in V, i != j
       IloArray<IloRangeArray> constraint17(env, V);
-      for(auto i = 0; i < V; i++)
+      for(auto i = D; i < V; i++)
         {
           constraint17[i] = IloRangeArray(env, V);
-          for(auto j = 0; j < V; j++)
+          for(auto j = D; j < V; j++)
             {
               if(i != j)
                 {
                   name << "constraint17_" << i << " " << j;
-                  constraint17[i][j] = IloRange(env, -IloInfinity, w[j] - w[i] - (D - 1) * (1 - x[i][j]), 0, name.str().c_str());
+                  constraint17[i][j] = IloRange(env, -IloInfinity, w[j] - w[i] - (WD - 1) * (1 - x[i][j]), 0, name.str().c_str());
                   name.str("");
                   model.add(constraint17[i][j]);
                 }
@@ -674,11 +663,11 @@ void solveMILP(int opt)
         }
 
       // Constraints 18) x_{ij} = 0, for all i in D, j in D
-      IloArray<IloRangeArray> constraint18(env, D);
-      for(auto i = 0; i < D; i++)
+      IloArray<IloRangeArray> constraint18(env, WD);
+      for(auto i = D; i < WD; i++)
         {
-          constraint18[i] = IloRangeArray(env, D);
-          for(auto j = 0; j < D; j++)
+          constraint18[i] = IloRangeArray(env, WD);
+          for(auto j = D; j < WD; j++)
             {
               if(i != j)
                 {
@@ -688,7 +677,6 @@ void solveMILP(int opt)
                   model.add(constraint18[i][j]);
                 }
             }
-
         }
       // Constraints 19) L_i + P_i <= 1, for all i in N
       IloRangeArray constraint19(env, N);
@@ -700,15 +688,14 @@ void solveMILP(int opt)
         }
       model.add(constraint19);
 
-      for(auto i = 0; i < V; i++)
+      for(auto i = D; i < V; i++)
         model.add(x[i][i] == 0);
 
       // Cplex Parameters
-      int timeLimit = 3600;
-      // cplex.exportModel("model.lp");
+      //cplex.exportModel("model.lp");
       cplex.setParam(IloCplex::Param::Threads, 1);
       cplex.setParam(IloCplex::Param::TimeLimit, timeLimit);
-      cplex.setParam(IloCplex::Param::MIP::Limits::TreeMemory, 5000);
+      cplex.setParam(IloCplex::Param::MIP::Limits::TreeMemory, memoryLimit);
       // Solve
       if(!cplex.solve())
         {
@@ -734,34 +721,46 @@ void solveMILP(int opt)
         }
       cout << endl;
 
-      cout << "y: " << endl;
-      int watchtowers = 0, ballons = 0;
-      float B2 = 0.0;
+      cout << "y: ";
+      for(auto i = 0; i < WD; i++)
+        cout << cplex.getValue(y[i]) << " ";
+      cout << endl;
+
+      int watchtowers = 0, ewatchtowers = 0, ballons = 0, nDrones = 0;
+      float wtCost = 0.0, ballCost = 0.0, routeCost = 0.0;
+      // count ballons
       for(auto i = 0; i < D; i++)
         {
-          for(auto j = 0; j < K; j++)
+          if(cplex.getValue(y[i]) > 0.9)
             {
-              B2 += cplex.getValue(y[i][j]) * C[i][j];
-              int y_ij = cplex.getValue(y[i][j]);
-              cout << "y[" << i << "][" << j << "] = "<<  y_ij << endl;
-              if(!j && y_ij)
-                watchtowers++;
-              else if(j && y_ij)
-                ballons++;
+              ballons++;
+              ballCost += techCost[1];
             }
         }
-
-      cout << "B = " << B2 << endl;
-      float routeCost = 0.0;
-      cout << "x: " << endl;
-      for(auto i = 0; i < V; i++)
+      // count existing watchtowers
+      for(auto i = D; i < D + We; i++)
+        if(cplex.getValue(y[i]) > 0.9)
+          ewatchtowers++;
+      // count watchtowers
+      for(auto i = D + We; i < WD; i++)
         {
-          for(auto j = 0; j < V; j++)
+          if(cplex.getValue(y[i]) > 0.9)
+            {
+              watchtowers++;
+              wtCost += techCost[0];
+            }
+        }
+      cout << "x: " << endl;
+      for(auto i = D; i < V; i++)
+        {
+          for(auto j = D; j < V; j++)
             {
               if(cplex.getValue(x[i][j]) > 0.9)
                 {
-                  routeCost += t[i][j];
+                  routeCost += t[i][j] * costUAV;
                   cout << "x[" << i << "][" << j << "] = "<< cplex.getValue(x[i][j]) << " -> " << t[i][j] << endl;
+                  if(i < WD)
+                    nDrones++;
                 }
             }
         }
@@ -774,16 +773,16 @@ void solveMILP(int opt)
       if(opt % 2 == 0)
         {
           cout << "u: ";
-          for(auto i = 0; i < V; i++)
+          for(auto i = D; i < V; i++)
             cout << cplex.getValue(u[i]) << " ";
           cout << endl;
         }
       else
         {
           cout << "g: " << endl;
-          for(auto i = 0; i < V; i++)
+          for(auto i = D; i < V; i++)
             {
-              for(auto j = 0; j < V; j++)
+              for(auto j = D; j < V; j++)
                 {
                   if(i != j && cplex.getValue(g[i][j]) > 0.9)
                     {
@@ -798,24 +797,37 @@ void solveMILP(int opt)
         cout << cplex.getValue(w[i]) << " ";
       cout << endl;
 
+      float LB = cplex.getBestObjValue();
       float totalTime = cplex.getTime();
-      float totalCost = routeCost + B2;
+      float DroneCost = nDrones * techCost[3];
+
+      float totalCost = wtCost + DroneCost + ballCost;
+
+      if(opt > 3)
+        totalCost += routeCost;
       int totalCover = sumL + sumP;
       float gap = ((cplex.getStatus() == IloAlgorithm::Optimal) ? 0 : cplex.getMIPRelativeGap() * 100);
       IloAlgorithm::Status status = cplex.getStatus();
 
-      cout << "Instance    = " << nameInstance << endl;
-      cout << "Total Cost  = " << totalCost << endl;
-      cout << "Route Cost  = " << routeCost << endl;
-      cout << "Budget      = " << B2 << " / " << B << endl;
-      cout << "Cover       = " << totalCover << endl;
-      cout << "Cover L     = " << sumL << endl;
-      cout << "Cover P     = " << sumP << endl;
-      cout << "Watchtowers = " << watchtowers << endl;
-      cout << "Ballons     = " << ballons << endl;
-      cout << "Time        = " << totalTime << endl;
-      cout << "Status      = " << status << endl;
-      cout << "GAP (%)     = " << gap << endl;
+      cout << "Instance            = " << nameInstance << endl;
+      cout << "LB                  = " << LB << endl;
+      cout << "Total Cost          = " << totalCost << " " << cplex.getObjValue() << endl;
+      if(opt > 3)
+        cout << "Total Cost w/o RC   = " << totalCost - routeCost << endl;
+      cout << "Route Cost          = " << routeCost << endl;
+      cout << "Watchtowers Cost    = " << wtCost << endl;
+      cout << "Ballons Cost        = " << ballCost << endl;
+      cout << "Drones Cost         = " << DroneCost << endl;
+      cout << "Drone number        = " << nDrones << endl;
+      cout << "existing WT number  = " << ewatchtowers << endl;
+      cout << "Watchtowers number  = " << watchtowers << endl;
+      cout << "Ballons number      = " << ballons << endl;
+      cout << "Covering            = " << totalCover << endl;
+      cout << "Covering by Facili. = " << sumL << endl;
+      cout << "Covering by Drones  = " << sumP << endl;
+      cout << "Time                = " << totalTime << endl;
+      cout << "Status              = " << status << endl;
+      cout << "GAP (%)             = " << gap << endl;
 
       FILE *file;
       stringstream ss;
@@ -828,9 +840,11 @@ void solveMILP(int opt)
           printf("Error in reading of the %s \n", output.c_str());
           exit(0);
         }
-      fprintf(file, "%s\t%d\t%d\t%d\t%d\t%s\t%f\t%f\t%f\t%d\t%d\t%d\t%d\t%d\t%f\t%f\n",
-              nameInstance.c_str(), N, S, D, B, s.c_str(), totalCost, routeCost, B2, totalCover, sumL, sumP, watchtowers, ballons, gap, totalTime);
+      fprintf(file, "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%f\t%f\t%f\t%f\t%f\t%f\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\n",
+              nameInstance.c_str(), N, S, D, We, W, B, s.c_str(), LB, totalCost, routeCost, wtCost, ballCost, DroneCost, totalCover, sumL, sumP, ballons, ewatchtowers,
+              watchtowers, nDrones, gap, totalTime);
       fclose(file);
+
     } catch (IloException& ex) {
     cerr << "Error: " << ex << endl;
   }
@@ -845,30 +859,10 @@ void callILS(int opt)
   cout << "ILS is running" << endl;
   // initial cost, cost obtained, computing time
   float result[3] = {0.0, 0.0, 0.0};
-
-  int nRun = 10;
-  float avg_cost = 0.0, avg_time = 0.0, avg_initcost = 0.0;
-  float min_cost = 9999999.0, min_time = 9999999.0, min_initcost = 9999999.0;
-  for(auto i = 0; i < nRun; i++)
-    {
-      int seed = i;
-      ILS *ils = new ILS(seed, N, D, K, S, B, beta, ND, T, V, distSum, a, b, bi, t, mMax, mMin, C);
-      ils->run(&result[0]);
-      delete ils;
-      avg_initcost += result[0];
-      avg_cost += result[1];
-      avg_time += result[2];
-      min_initcost = (result[0] < min_initcost) ? result[0] : min_initcost;
-      min_cost = (result[1] < min_cost) ? result[1] : min_cost;
-      min_time = (result[2] < min_time) ? result[2] : min_time;
-
-      cout << result[0] << "\t" << result[1] << "\t" << result[2] << endl;
-    }
-  avg_initcost /= nRun;
-  avg_cost /= nRun;
-  avg_time /= nRun;
-  cout << "minInitCost\tavgInitCost\tminCost\tavgCost\ttime" << endl;
-  cout << min_initcost << "\t" << avg_initcost << "\t" << min_cost << "\t" << avg_cost << "\t" << avg_time << endl;
+  ILS *ils = new ILS(seed, N, D, K, S, B, beta, ND, T, V, distSum, a, b, bi, t, mMax, mMin, C);
+  ils->run(&result[0]);
+  delete ils;
+  cout << result[0] << "\t" << result[1] << "\t" << result[2] << endl;
   FILE *file;
   stringstream ss;
   string s;
@@ -878,14 +872,13 @@ void callILS(int opt)
       printf("Error in reading of the %s \n", output.c_str());
       exit(0);
     }
-  fprintf(file, "%s\t%f\t%f\t%f\t%f\t%f\n", nameInstance.c_str(), min_initcost, avg_initcost, min_cost, avg_cost, avg_time);
+  fprintf(file, "%s\t%f\t%f\t%f\t\n", nameInstance.c_str(), result[0], result[1], result[2]);
   fclose(file);
 }
 
 void callMatheuristic()
 {
   cout << "Matheuristic is running" << endl;
-  int seed = 0;
   ILS *ils = new ILS(seed, N, D, K, S, B, beta, ND, T, V, distSum, a, b, bi, t, mMax, mMin, C);
   ils->runMH();
   delete ils;
@@ -897,7 +890,6 @@ void solveTwoStage(int opt)
 
 }
 
-
 int main(int argc, char *argv[])
 {
   cout << "An heuristic for MC-FDMLRP-DC" << endl;
@@ -905,6 +897,12 @@ int main(int argc, char *argv[])
   nameInstance = argv[1];
   string name = folder + nameInstance;
   int opt = atoi(argv[2]);
+  seed = atoi(argv[3]);
+  timeLimit = atoi(argv[4]);
+  if(argc > 5)
+    memoryLimit = atoi(argv[5]);
+  else
+    memoryLimit = 5000;
 
   cout << name << endl;
   readInstance(name.c_str());

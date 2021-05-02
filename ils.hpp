@@ -5,6 +5,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <map>
 #include <chrono>
 #include <random>
 #include <algorithm>
@@ -20,7 +21,7 @@ private:
   struct Solution {
     int *Sd;
     vector<vector<int> > Ss;
-    vector<int> noInSs;
+    bool *noInSs;
     int *coveredArea;
     int feasible;
     float Lcost;
@@ -28,6 +29,7 @@ private:
     float cost;
   };
   Solution solution;
+  map<float, Solution> elite;
   int N;
   int D;
   int K;
@@ -40,7 +42,7 @@ private:
   float **t;
   int *mMax;
   int *mMin;
-  int **C;
+  float **C;
   int **b;
   int seed;
   vector<vector<vector<int> > > alpha;
@@ -55,12 +57,14 @@ private:
   void coveringAreaByDepot(Solution &s, int d, int k);
   void coveringAreaByNode(Solution &s, int i);
   void copyS(Solution &s, Solution &sbest);
+  void updateElite(Solution &s, float cost);
 
   // operator
   bool initialSolution(Solution &s);
   void perturbation1(Solution &s);
   void perturbation2(Solution &s);
   void perturbation3(Solution &s);
+  void perturbation4(Solution &s);
   bool twoOpt(vector <int> &s);
   bool removeNode(Solution &s);
   bool LS_swap(Solution &s);
@@ -71,7 +75,7 @@ public:
   uniform_real_distribution<double> randValue;
   // function
   ILS(int seed, int N, int D, int K, int S, int B, int **bo, int ND, float T, int V, float M,
-      vector<vector<vector<int> > > &a, vector<vector<int> > &b, vector<vector<int> > &bi,  float **t, int *mMax, int *mMin, int **C);
+      vector<vector<vector<int> > > &a, vector<vector<int> > &b, vector<vector<int> > &bi,  float **t, int *mMax, int *mMin, float **C);
   virtual ~ILS();
   void run(float *result);
   void runMH();

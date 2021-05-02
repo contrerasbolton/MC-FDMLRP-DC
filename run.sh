@@ -7,6 +7,10 @@ I=$3
 J=$4
 
 OUTPUT="output/"
+start=0
+end=0
+startSeed=0
+endSeed=0
 if [ "$TYPE" = "M1-MTZ" ]
 then
     algorithm=0
@@ -28,6 +32,7 @@ then
 elif [ "$TYPE" = "MH" ]
 then
     algorithm=6
+    endSeed=9
 else
     echo "algorithm does not exist"
     exit
@@ -68,7 +73,10 @@ fi
 
 for i in `seq $start $end`;
 do
-    run="./drone $INSTANCE$i.dat $algorithm"
-    echo "$run > $OUTPUT$INSTANCE$i"_"$TYPE.txt"
-    $run > $OUTPUT$INSTANCE$i"_"$TYPE.txt
+    for seed in `seq $startSeed $endSeed`;
+    do
+	run="./drone $INSTANCE$i.dat $algorithm $seed"
+	echo "$seed $run > $OUTPUT$INSTANCE$i"_"$TYPE.txt"
+	$run > $OUTPUT$INSTANCE$i"_"$TYPE.txt
+    done
 done;

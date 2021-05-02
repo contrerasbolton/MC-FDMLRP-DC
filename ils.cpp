@@ -1,8 +1,10 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2; -*- */
 #include "ils.hpp"
 
+unsigned sizeElite = 10;
+
 ILS::ILS(int seed, int N, int D, int K, int S, int B, int **beta, int ND, float T, int V, float M,
-         vector<vector<vector<int> > > &a, vector<vector<int> > &b, vector<vector<int> > &bi, float **t, int *mMax, int *mMin, int **C)
+         vector<vector<vector<int> > > &a, vector<vector<int> > &b, vector<vector<int> > &bi, float **t, int *mMax, int *mMin, float **C)
 {
   this->seed = seed;
   this->N = N;
@@ -73,19 +75,15 @@ ILOMIPINFOCALLBACK5(timeLimitCallback,
 
 bool ILS::initialSolution(Solution &s)
 {
-  // cout << "soy otro!" << endl;
-
+  // cout << "Start Initial Solution" << endl;
   // reset covered Area
   for(auto i = 0; i < N; i++)
     s.coveredArea[i] = 0;
 
   // reset depot
-  int maxK[D];
+  int maxK[2] = {0, 0};
   for(auto i = 0; i < D; i++)
-    {
-      s.Sd[i] = -1;
-      maxK[i] = 0;
-    }
+    s.Sd[i] = -1;
 
   // assures the minimum K = 1
   int d = 0;
@@ -152,9 +150,10 @@ bool ILS::initialSolution(Solution &s)
   //   cout << s.coveredArea[i] << " ";
   // cout << endl;
 
-
   vector<int> nodes;
-  vector<bool> mark(V, false);
+  //ector<bool> mark(V, false);
+  for(auto i = 0; i < V; i++)
+    s.noInSs[i] = false;
 
   // Nodes subset according to uncovered areas
   for(auto i = 0; i < N; i++)
@@ -164,9 +163,9 @@ bool ILS::initialSolution(Solution &s)
           for(unsigned j = 0; j < bi[i].size(); j++)
             {
               int node = bi[i][j];
-              if(!mark[node])
+              if(!s.noInSs[node])
                 {
-                  mark[node] = true;
+                  s.noInSs[node] = true;
                   nodes.push_back(node);
                 }
             }
@@ -176,12 +175,9 @@ bool ILS::initialSolution(Solution &s)
   // random nodes
   shuffle(nodes.begin(), nodes.end(), default_random_engine(seed));
 
-  // cout << "oli" << endl;
-
   // for(unsigned i = 0; i < nodes.size(); i++)
   //   cout << nodes[i] << " ";
   // cout << endl;
-
   // exit(0);
   // float currentCost = 0.0;
   int u = 0, v = 0;
@@ -260,8 +256,7 @@ bool ILS::initialSolution(Solution &s)
     }
   //cout << endl;
 
-
-  // // cout << "Ss:" << endl;
+  // cout << "Ss:" << endl;
   // for(unsigned i = 0; i < s.Ss.size(); i++)
   //   {
   //      if(i % 2 == 0)
@@ -366,12 +361,14 @@ bool ILS::initialSolution(Solution &s)
     }
 
   for(unsigned i = 0; i < nodes.size(); i++)
-    mark[nodes[i]] = false;
+    s.noInSs[nodes[i]] = false;
 
-  s.noInSs.clear();
-  for(auto i = D; i < V; i++)
-    if(!mark[i])
-      s.noInSs.push_back(i);
+  // for(auto i = D; i < V; i++)
+  //   {
+  //     s.noInSs[i] = false;
+  //     if(mark[i])
+  //       s.noInSs[i]
+  //   }
 
   // if(lastPosition < S)
   //   {
@@ -385,37 +382,32 @@ bool ILS::initialSolution(Solution &s)
   //   cout << s.coveredArea[i] << " ";
   // cout << endl;
 
+  //cout << computeCost(s) << endl;
+  computeCost(s);
+  // print_sol(s);
+  // cout << "End initial Solution" << endl;
 
-
-  cout << computeCost(s) << endl;
-  print_sol(s);
-  // if(s.feasible)
-  //   {
-  //     print_sol(s);
-  //     exit(0);
-  //   }
-  // // check if the solution is feasible
-  // for(auto i = 0; i < N; i++)
-  //     if(!s.coveredArea[i])
-  //       return false;
-  // if(!test)
   // exit(0);
-
-
   return true;
 }
 
-void ILS::copyS(Solution &s, Solution &sbest)
+void ILS::copyS(Solution &give, Solution &receive)
 {
   for(auto i = 0; i < D; i++)
-    sbest.Sd[i] = s.Sd[i];
+    receive.Sd[i] = give.Sd[i];
 
   for(auto i = 0; i < N; i++)
-    sbest.coveredArea[i] = s.coveredArea[i];
+    receive.coveredArea[i] = give.coveredArea[i];
 
-  sbest.noInSs = vector<int>(s.noInSs);
+  for(auto i = 0; i < V; i++)
+    receive.noInSs[i] = give.noInSs[i];
 
-  sbest.Ss = s.Ss;
+  for(unsigned i = 0; i < give.Ss.size(); i++)
+    {
+      receive.Ss[i].clear();
+      for(unsigned j = 0; j < give.Ss[i].size(); j++)
+        receive.Ss[i].push_back(give.Ss[i][j]);
+    }
 }
 
 float ILS::solver(vector<int> &y, float currentUB, float timeLimit, Solution &s, bool flag, bool initSol)
@@ -460,11 +452,11 @@ float ILS::solver(vector<int> &y, float currentUB, float timeLimit, Solution &s,
                 }
             }
         }
-      cout << "******new**********************" << endl;
-      for(auto i = 0; i < D; i++)
-        {
-         cout << y[i] << " ";
-        }
+      // cout << "******new**********************" << endl;
+      // for(auto i = 0; i < D; i++)
+      //   {
+      //    cout << y[i] << " ";
+      //   }
     }
   IloEnv env;
   try
@@ -886,11 +878,11 @@ float ILS::solver(vector<int> &y, float currentUB, float timeLimit, Solution &s,
 
       // Cplex Parameters
       //timeLimit = 10;
-      cplex2.exportModel("model2.lp");
+      // cplex2.exportModel("model2.lp");
       cplex2.setParam(IloCplex::Param::Threads, 1);
       cplex2.setParam(IloCplex::Param::TimeLimit, timeLimit);
       cplex2.setParam(IloCplex::Param::Emphasis::MIP, 1);
-      cplex2.setParam(IloCplex::Param::MIP::Limits::Solutions, 1);
+      cplex2.setParam(IloCplex::Param::MIP::Limits::Solutions, 3);
       cplex2.use(timeLimitCallback(env, cplex2, IloFalse, cplex2.getCplexTime(), timeLimit, currentUB));
       cplex2.setOut(env.getNullStream());
       cplex2.setParam(IloCplex::Param::MIP::Display, 0);
@@ -902,16 +894,19 @@ float ILS::solver(vector<int> &y, float currentUB, float timeLimit, Solution &s,
           return 99999999;
         }
 
-      float routingCost = cplex2.getObjValue();
-      float routingTime = cplex2.getTime();
-      cout << "UB   = " << routingCost << endl;
-      cout << "LB " << cplex2.getBestObjValue() << endl;
-      cout << "time = " << routingTime << endl;
+      // float routingCost = cplex2.getObjValue();
+      // float routingTime = cplex2.getTime();
+      // cout << "UB   = " << routingCost << endl;
+      // cout << "LB " << cplex2.getBestObjValue() << endl;
+      // cout << "time = " << routingTime << endl;
 
       if(flag)
         {
           // reset routes
-          s.noInSs.clear();
+          //s.noInSs.clear();
+          cout << "check the change of s.noInSs" << endl;
+          exit(0);
+
           vector<bool> check(V, true);
 
           for(auto c = 0; c < D * 2; c++)
@@ -956,26 +951,26 @@ float ILS::solver(vector<int> &y, float currentUB, float timeLimit, Solution &s,
                     }
                 }
             }
-          for(auto i = D; i < V; i++)
-            {
-              if(check[i])
-                s.noInSs.push_back(i);
-            }
+          // for(auto i = D; i < V; i++)
+          //   {
+          //     if(check[i])
+          //       s.noInSs.push_back(i);
+          //   }
 
         }
 
       // getchar();
-      cout << "P: ";
-      for(auto i = 0; i < N; i++)
-        cout << cplex2.getValue(P[i]) << " ";
-      cout << endl;
+      // cout << "P: ";
+      // for(auto i = 0; i < N; i++)
+      //   cout << cplex2.getValue(P[i]) << " ";
+      // cout << endl;
 
-      cout << "L: ";
-      for(auto i = 0; i < N; i++)
-        cout << L[i] << " ";
-      cout << endl;
+      // cout << "L: ";
+      // for(auto i = 0; i < N; i++)
+      //   cout << L[i] << " ";
+      // cout << endl;
 
-      cout << "x: " << endl;
+      // cout << "x: " << endl;
       float routeCost = 0.0;
       for(auto i = 0; i < V; i++)
         {
@@ -984,15 +979,15 @@ float ILS::solver(vector<int> &y, float currentUB, float timeLimit, Solution &s,
               if(cplex2.getValue(x[i][j]) > 0.9)
                 {
                   routeCost += t[i][j];
-                  cout << "x[" << i << "][" << j << "] = "<< cplex2.getValue(x[i][j]) << " -> " << t[i][j] << endl;
+                  // cout << "x[" << i << "][" << j << "] = "<< cplex2.getValue(x[i][j]) << " -> " << t[i][j] << endl;
                 }
             }
         }
 
-      cout << "v: ";
-      for(auto i = 0; i < S; i++)
-        cout << cplex2.getValue(v[i]) << " ";
-      cout << endl;
+      // cout << "v: ";
+      // for(auto i = 0; i < S; i++)
+      //   cout << cplex2.getValue(v[i]) << " ";
+      // cout << endl;
 
       float B2 = 0.0;
       float finalCost = cplex2.getObjValue();
@@ -1000,26 +995,26 @@ float ILS::solver(vector<int> &y, float currentUB, float timeLimit, Solution &s,
         B2 += C[i][y[i]];
 
 
-      cout << "w: ";
-      for(auto i = 0; i < V; i++)
-        cout << cplex2.getValue(w[i]) << " ";
-      cout << endl;
+      // cout << "w: ";
+      // for(auto i = 0; i < V; i++)
+      //   cout << cplex2.getValue(w[i]) << " ";
+      // cout << endl;
 
-      cout << "Depot: ";
-      for(auto i = 0; i < D; i++)
-        cout << y[i] << " ";
-      cout << endl;
+      // cout << "Depot: ";
+      // for(auto i = 0; i < D; i++)
+      //   cout << y[i] << " ";
+      // cout << endl;
 
-      cout << "Budget = " << B2 << endl;
-      cout << "Route cost  = " << routeCost << endl;
-      cout << "Total cost" << B2 + routeCost << " " << finalCost <<endl;
+      // cout << "Budget = " << B2 << endl;
+      // cout << "Route cost  = " << routeCost << endl;
+      // cout << "Total cost" << B2 + routeCost << " " << finalCost <<endl;
 
-      if(finalCost < M)
-        {
-          cout << "M = " << M << endl;
-          M = finalCost;
-          cout << "updated M = " << M << endl;
-        }
+      // if(finalCost < M)
+      //   {
+      //     // cout << "M = " << M << endl;
+      //     M = finalCost;
+      //     // cout << "updated M = " << M << endl;
+      //   }
 
       return finalCost;
       // cout << "Total time  = " << locationTime + routingTime << endl;
@@ -1092,25 +1087,99 @@ void ILS::runMH()
   cout << "Time = " << totalTime << endl;
 }
 
+void ILS::updateElite(Solution &s1, float cost)
+{
+  if(s1.feasible)
+    {
+      if(elite.size() > 0)
+        {
+          map<float, Solution>::iterator rit = --elite.end();
+          //cout << "dasddasdasdadgjhdgjkasdgasdhgasdgasjdgaskdjghasdhasgdjkg " <<  rit->first << " " << cost << endl;
+          if(elite.size() < sizeElite || rit->first > cost)
+            {
+              if(elite.find(cost) == elite.end())
+                {
+                  // cout << ":O" << endl;
+                  Solution s;
+                  s.Sd = new int[D];
+
+                  // areas to cover
+                  s.coveredArea = new int[N];
+                  for(auto i = 0; i < N; i++)
+                    {
+                      s.coveredArea[i] = 0;
+                    }
+
+                  // initialize routes
+                  for(auto d = 0; d < D * 2; d++)
+                    {
+                      s.Ss.push_back(vector<int>());
+                    }
+
+                  // initialize noInSs
+                  s.noInSs = new bool[V];
+                  //computeCost(s1);
+                  copyS(s1, s);
+                  elite.insert(make_pair(cost, s));
+                  // cout << population.size() << endl;
+                  while(elite.size() > sizeElite)
+                    elite.erase(--elite.end());
+                }
+            }
+        }
+      else
+        {
+          // cout << "|:O " << elite.size() << endl;
+          Solution s;
+          s.Sd = new int[D];
+
+          // areas to cover
+          s.coveredArea = new int[N];
+          for(auto i = 0; i < N; i++)
+            {
+              s.coveredArea[i] = 0;
+            }
+
+          // initialize routes
+          for(auto d = 0; d < D * 2; d++)
+            {
+              s.Ss.push_back(vector<int>());
+            }
+
+          // initialize noInSs
+          s.noInSs = new bool[V];
+          //computeCost(s1);
+          copyS(s1, s);
+          //computeCost(s1);
+          // print_sol(s);
+          elite.insert(make_pair(cost, s));
+        }
+    }
+}
+
 void ILS::run(float *result)
 {
   cout << "ILS" << endl;
   auto start = chrono::steady_clock::now();
+
   Solution s;
   Solution sBest;
+  Solution sBestBest;
+
   // depot
   s.Sd = new int[D];
   sBest.Sd = new int[D];
-  // for(auto i = 0; i < D; i++)
-  //   s.Sd[i] = rnd(0, K);
+  sBestBest.Sd = new int[D];
 
   // areas to cover
-  s.coveredArea = new int [N];
-  sBest.coveredArea = new int [N];
+  s.coveredArea = new int[N];
+  sBest.coveredArea = new int[N];
+  sBestBest.coveredArea = new int[N];
   for(auto i = 0; i < N; i++)
     {
       s.coveredArea[i] = 0;
       sBest.coveredArea[i] = 0;
+      sBestBest.coveredArea[i] = 0;
     }
 
   // initialize routes
@@ -1118,143 +1187,223 @@ void ILS::run(float *result)
     {
       s.Ss.push_back(vector<int>());
       sBest.Ss.push_back(vector<int>());
+      sBestBest.Ss.push_back(vector<int>());
     }
 
+  // initialize noInSs
+  s.noInSs = new bool[V];
+  sBest.noInSs = new bool[V];
+  sBestBest.noInSs = new bool[V];
+
   // build initial solution
-  int nTimes = 3;
+  int nTimes = 10000;
   for(auto times = 0; times < nTimes; times++)
     {
+      cout << times << endl;
       initialSolution(s);
+      // cout << "here0?" << endl;
       computeCost(s);
-      if(s.feasible == 0)
+      if(!s.feasible)
         {
-          vector<int> initial(D);
-          //cout << "*********************************" << endl;
-          for(auto i = 0; i < D; i++)
+          float alpha = randValue(generator);
+          if(alpha < 0.25)
             {
-              //cout << s.Sd[i] << " ";
-              initial[i] = s.Sd[i];
+              //cout << "pert1" << endl;
+              perturbation1(s);
             }
-          // cout << endl;
-          // cout << "*********************************" << endl;
-          solver(initial, 999999, 10, s, true, false);
+          else if(alpha < 0.50)
+            {
+              //cout << "pert2" << endl;
+              perturbation2(s);
+            }
+          else if(alpha < 0.75)
+            {
+              //cout << "pert3" << endl;
+              perturbation3(s);
+            }
+          else
+            {
+              //cout << "pert4" << endl;
+              perturbation4(s);
+            }
           computeCost(s);
-          // print_sol(s);
-          // exit(0);
-          // getchar();
+
+          for(auto i = 0; i < 10; i++)
+            {
+              // cout << "2opt" << endl;
+              for(auto c = 0; c < D * 2; c++)
+                if(s.Ss[c].size())
+                  twoOpt(s.Ss[c]);
+              // computeCost(s);
+              // cout << "remove" << endl;
+              removeNode(s);
+              // computeCost(s);
+
+              // cout << "swap" << endl;
+              LS_swap(s);
+              computeCost(s);
+            }
           if(s.feasible)
             break;
         }
+
+      for(auto i = 0; i < 10; i++)
+        {
+          for(auto c = 0; c < D * 2; c++)
+            if(s.Ss[c].size())
+              twoOpt(s.Ss[c]);
+          removeNode(s);
+          LS_swap(s);
+          computeCost(s);
+        }
+
+      if(s.feasible)
+        break;
+      // if(times > 9 && s.feasible == 0)
+      //   {
+      //     vector<int> initial(D);
+      //     //cout << "*********************************" << endl;
+      //     for(auto i = 0; i < D; i++)
+      //       {
+      //         //cout << s.Sd[i] << " ";
+      //         initial[i] = s.Sd[i];
+      //       }
+      //     // cout << endl;
+      //     // cout << "*********************************" << endl;
+      //     solver(initial, 999999, 10, s, true, false);
+      //     computeCost(s);
+      //     // print_sol(s);
+      //     // exit(0);
+      //     // getchar();
+      //     if(s.feasible)
+      //       break;
+      //   }
     }
+  // cout << "dsliii" << endl;
+
+  // exit(0);
+
   for(auto t = 0; t < 3; t++)
     {
       for(auto c = 0; c < D * 2; c++)
         if(s.Ss[c].size())
           twoOpt(s.Ss[c]);
       removeNode(s);
+      LS_swap(s);
     }
 
   float s_cost = computeCost(s);
-  cout << "cost " << s_cost << endl;
+  cout << "cost " << s_cost << " " << s.feasible << endl;
   // print_sol(s);
 
+  vector<float> solutions;
   float s_bestCost = 99999999;
+  float s_bestBestCost = 99999999;
   if(s.feasible)
     {
-      s_bestCost = s_cost;
+      s_bestBestCost = s_bestCost = s_cost;
       copyS(s, sBest);
+      copyS(sBest, sBestBest);
+      solutions.push_back(s_cost);
     }
-  // cout << "entré?" << endl;
-  vector<float> solutions;
-  int alpha = 0;
-  for(auto iter = 1; iter < 10000; iter++)
+
+  float alpha = 0;
+  for(auto iter = 1; iter < 1000000; iter++)
     {
       // cout << "perturbation1 1" << endl;
-      if(iter % 200 == 0)
+      if(iter % 10000 == 0)
+        cout << "iter " << iter << endl;
+
+      if(iter % 20000 == 0)
         {
-          cout << "initialSolution" << endl;
+          // cout << "reset" << endl;
+          s_bestCost = 9999999;
 
-          initialSolution(s);
-          s_cost = computeCost(s);
-          // repareSolution(s);
-
-          // cout << "oli" << endl;
-          // for(auto i = 0; i < N; i++)
-          //   cout << s.coveredArea[i] << " ";
-          // cout << endl;
-
-        }
-      else if(s.feasible && randValue(generator) < 0.4)
-        {
-          cout << "copy" << endl;
-
-          copyS(sBest, s);
-
-          if(randValue(generator) < 0.6)
+          if(elite.size())
             {
-              cout << "model" << endl;
-              vector<int> initial(D);
-              //print_sol(s);
-              cout << "*********************************" << endl;
-              for(auto i = 0; i < D; i++)
-                {
-                  //cout << s.Sd[i] << " ";
-                  initial[i] = s.Sd[i];
-                }
-              copyS(sBest, s);
-              solver(initial, 9999999, 3, s, true, true);
-              // exit(0);
-              //print_sol(s);
-
-              if((s_bestCost > s_cost) && s.feasible)
-                {
-                  s_bestCost = s_cost;
-                  copyS(s, sBest);
-                  cout << "que ondi " << s_cost << " "<< computeCost(s)<< endl;
-                  solutions.push_back(s_cost);
-                  //getchar();
-                }
-
-
-              // getchar();
-            }
-          alpha = randValue(generator);
-          if(alpha < 0.33)
-            {
-              cout << "pert1" << endl;
-              perturbation1(s);
-            }
-          else if(alpha < 0.66)
-            {
-              cout << "pert2" << endl;
-              perturbation2(s);
+              map<float, Solution>::iterator it = elite.begin();
+              int position = rnd(0, elite.size() - 1);
+              // cout << "rnd " << position << endl;
+              advance(it, position);
+              copyS(it->second, s);
+              s_cost = it->first;
             }
           else
             {
-              cout << "pert3" << endl;
+              initialSolution(s);
+              s_cost = computeCost(s);
+            }
+          // 2-opt for each route
+          for(auto c = 0; c < D * 2; c++)
+            {
+              if(s.Ss[c].size())
+                twoOpt(s.Ss[c]);
+          }
+          s_cost = computeCost(s);
+          removeNode(s);
+          s_cost = computeCost(s);
+          LS_swap(s);
+          s_cost = computeCost(s);
+        }
+      if(iter % 2000 == 0)
+        {
+          initialSolution(s);
+          s_cost = computeCost(s);
+          // cout << "here?" << endl;
+        }
+      float test = randValue(generator);
+      if(test < 0.3)
+        {
+          alpha = randValue(generator);
+          // cout << "alpha " << alpha << endl;
+
+          if(alpha < 0.25)
+            {
+              // cout << "pert1" << endl;
+              perturbation1(s);
+            }
+          else if(alpha < 0.50)
+            {
+              // cout << "pert2" << endl;
+              perturbation2(s);
+            }
+
+          else if(alpha < 0.75)
+            {
+              // cout << "pert3" << endl;
               perturbation3(s);
             }
+          else
+            perturbation4(s);
+          // cout << "here3" << endl;
+
           computeCost(s);
+        }
+      else if(test < 0.6 && elite.size())
+        {
 
-          // else
-          //   {
-          //     // twoOpt(s.Ss[2]);
-          //     // cout << "remove" << endl;
+          // cout << "qua? " << elite.size() << endl;
+          // print_sol(s);
+          // cout << "dsadasdadasd" << endl;
 
-          // exit(0);
-          // }
+          map<float, Solution>::iterator it = elite.begin();
+          int position = rnd(0, elite.size() - 1);
+
+          // cout << "rnd " << position << endl;
+
+          // if(position != 0)
+          advance(it, position);
+          copyS(it->second, s);
+          // print_sol(s);
+          s_cost = computeCost(s);
+          //s_cost = it->first;
         }
 
-      cout << "2-opt" << endl;
+      // cout << "2-opt" << endl;
       // 2-opt for each route
       for(auto c = 0; c < D * 2; c++)
         {
           //cout << "2-opt " << c << endl;
-
-          // for(auto i = 0; i < N; i++)
-          //   cout << s.coveredArea[i] << " ";
-          // cout << endl;
-
           if(s.Ss[c].size())
             twoOpt(s.Ss[c]);
         }
@@ -1262,30 +1411,36 @@ void ILS::run(float *result)
       // for(auto i = 0; i < N; i++)
       //   cout << s.coveredArea[i] << " ";
       // cout << endl;
-
       s_cost = computeCost(s);
-      cout << "cost " << s_cost << endl;
+      // cout << "cost " << s_cost << endl;
       // print_sol(s);
 
-      cout << "removing nodes " << endl;
+      // cout << "removing nodes " << endl;
       removeNode(s);
       s_cost = computeCost(s);
       // print_sol(s);
 
       // LS: swap
-      cout << "swap" << endl;
+      // cout << "swap" << endl;
       LS_swap(s);
-
-      cout << "iter " << iter << ": "<< s_cost << endl;
+      s_cost = computeCost(s);
+      //cout << "iter " << iter << ": "<< s_cost << endl;
       if((s_bestCost > s_cost) && s.feasible)
         {
           s_bestCost = s_cost;
           copyS(s, sBest);
-          cout << "soy mejor " << s_cost << " "<< computeCost(s)<< endl;
-          solutions.push_back(s_cost);
+          // cout << "qui" << endl;
+          if(s_bestBestCost > s_cost)
+            {
+              s_bestBestCost = s_cost;
+              copyS(sBest, sBestBest);
+              cout << iter << " "<< s_cost << endl;
+              solutions.push_back(s_cost);
+            }
+
           //getchar();
         }
-      cout << "iteration ended" << endl;
+      // cout << "iteration ended" << endl;
       // for(auto i = 0; i < N; i++)
       //   cout << s.coveredArea[i] << " ";
       // cout << endl;
@@ -1297,22 +1452,45 @@ void ILS::run(float *result)
   auto diff = end - start;
   auto totalTime  = chrono::duration <double, std::ratio<1>> (diff).count();
 
-  s_bestCost = computeCost(sBest);
-  cout << "Best cost " << s_bestCost << endl;
-  print_sol(sBest);
-  cout << "Best cost " << s_bestCost << endl;
+  s_bestBestCost = computeCost(sBestBest);
+  cout << "Best cost " << s_bestBestCost << endl;
+  print_sol(sBestBest);
+  cout << "Best cost " << s_bestBestCost << endl;
   cout << "Best solution found:" << endl;
-  for(unsigned i = 0; i < solutions.size(); i++)
-    cout << i+1 << " "<< solutions[i] << endl;
-  cout << "Time = " << totalTime << endl;
+
+  if(solutions.size())
+    {
+      for(unsigned i = 0; i < solutions.size(); i++)
+        cout << i+1 << " "<< solutions[i] << endl;
+      cout << "Time = " << totalTime << endl;
+    }
+  else
+    {
+      cout << "A solution feasible are not found" << endl;
+      return;
+    }
+
+  // cout << "Sd: ";
+  // for(auto i = 0; i < D; i++)
+  //   cout << s.Sd[i] << " ";
+  cout << "Elite solution:" << endl;
+  for(std::map<float, Solution>::iterator it = elite.begin(); it != elite.end(); ++it)
+    cout << it->first << endl;
+
 
   result[0] = solutions[0];
-  result[1] = solutions[solutions.size() - 1];
+  result[1] = s_bestBestCost;
   result[2] = totalTime;
+
   delete s.Sd;
   delete sBest.Sd;
+  delete sBestBest.Sd;
   delete s.coveredArea;
   delete sBest.coveredArea;
+  delete sBestBest.coveredArea;
+  delete s.noInSs;
+  delete sBest.noInSs;
+  delete sBestBest.noInSs;
 }
 
 void ILS::coveringAreaByDepot(Solution &s, int d, int k)
@@ -1344,7 +1522,18 @@ void ILS::coveringAreaByNode(Solution &s, int i)
 
 void ILS::perturbation1(Solution &s)
 {
-  if(s.noInSs.size())
+  // cout << "dhajksdashkajdhaskjdhsakdjhaskjdhasdkjhasjkdhasjkdhaskdhs" << endl;
+
+  //print_sol(s);
+  vector<int> candidate;
+
+  for(auto i = D; i < V; i++)
+    {
+      if(!s.noInSs[i])
+        candidate.push_back(i);
+    }
+
+  if(candidate.size())
     {
       int route = 0;
       do {
@@ -1354,7 +1543,7 @@ void ILS::perturbation1(Solution &s)
       //cout << "route " << route << endl;
       // cout << s.noInSs.size() << endl;
 
-      int i = rnd(0, s.noInSs.size() - 1);
+      int i = rnd(0, candidate.size() - 1);
 
       //cout << "noInSs[i] = " << s.noInSs[i] << endl;
 
@@ -1362,19 +1551,17 @@ void ILS::perturbation1(Solution &s)
 
       //cout << "r = " << r << endl;
 
-      // for(unsigned i = 0; i < s.Ss[route].size(); i++)
-      //   {
-      //     cout << s.Ss[route][i] << " " << endl;
-      //   }
-      //cout << endl;
-
-      s.Ss[route].insert(s.Ss[route].begin() + r, s.noInSs[i]);
-      s.noInSs.erase(s.noInSs.begin() + i);
+      s.Ss[route].insert(s.Ss[route].begin() + r, candidate[i]);
+      s.noInSs[candidate[i]] = true;
     }
+  // print_sol(s);
+  // cout << "dhajksdashkajdhaskjdhsakdjhaskjdhasdkjhasjkdhasjkdhaskdhs" << endl;
+
 }
 
 void ILS::perturbation2(Solution &s)
 {
+  // cout << "perturbation2 " << computeCost(s) << endl;
   int route = 0;
   do {
     route = rnd(0, s.Ss.size() - 1);
@@ -1400,30 +1587,36 @@ void ILS::perturbation2(Solution &s)
 
 void ILS::perturbation3(Solution &s)
 {
+  // cout << "perturbation3 " << computeCost(s) << endl;
   int count = 0;
-  for(auto i = 0; i < D * 2 || count < 2; i++)
+  vector<int> r;
+
+  for(auto i = 0; i < D * 2 && count < 2; i++)
     {
       if(s.Ss[i].size() > 2)
-        count++;
+        {
+          r.push_back(i);
+          count++;
+        }
     }
 
   if(count > 1)
     {
-      int route1 = 0;
-      do {
-        route1 = rnd(0, s.Ss.size() - 1);
-      } while(s.Ss[route1].size() == 0);
+      int numRnd = rnd(0, r.size() - 1);
+      int route1 = r[numRnd];
 
       int route2 = 0;
       do {
-        route2 = rnd(0, s.Ss.size() - 1);
-      } while(s.Ss[route2].size() == 0 && route1 == route2);
-
+        numRnd = rnd(0, r.size() - 1);
+        route2 = r[numRnd];
+      } while(route1 == route2);
+      // cout << "route 1 " << route1 << endl;
+      // cout << "route 2 " << route2 << endl;
       int i = rnd(1, s.Ss[route1].size() - 2);
-      //cout << "Ss[r1][i] = " << s.Ss[route1][i] << endl;
+      // cout << "Ss[r1][i] = " << s.Ss[route1][i] << endl;
 
       int j = rnd(1, s.Ss[route2].size() - 2);
-      //cout << "Ss[r2][j] = " << s.Ss[route2][j] << endl;
+      // cout << "Ss[r2][j] = " << s.Ss[route2][j] << endl;
 
       int aux = s.Ss[route1][i];
       s.Ss[route1][i] = s.Ss[route2][j];
@@ -1432,6 +1625,235 @@ void ILS::perturbation3(Solution &s)
     }
 }
 
+void ILS::perturbation4(Solution &s)
+{
+  vector<int> index;
+  int d = 0;
+  // cout << "perturbation4 " << computeCost(s) << endl;
+  // print_sol(s);
+  int minK[2] = {0, 0};
+  for(unsigned i = 0; i < s.Ss.size(); i += 2)
+    {
+      d = i / 2;
+      if(s.Sd[d] == 0 && s.Ss[i].size())
+        {
+          minK[0]++;
+          if(s.Ss[i].size() < 5 && s.Ss[i + 1].size() < 5)
+            index.push_back(i);
+        }
+    }
+  if(!index.size() || minK[0] < 2)
+    return;
+
+  // for(unsigned i = 0; i < index.size(); i++)
+  //   cout << "route " << index[i]<< endl;
+
+  int j = rnd(0, index.size() - 1);
+  int route = index[j];
+  // cout << "chosen route " << route << endl;
+
+  d = route / 2;
+
+  // cout << "lalal" << s.Ss[route].size() << endl;
+
+  vector<int> nodes;
+  for(unsigned i = 1; i < s.Ss[route].size() - 1; i++)
+    nodes.push_back(s.Ss[route][i]);
+
+  // cout << "var" << endl;
+
+  s.Ss[route].clear();
+  if(s.Ss[route + 1].size())
+    {
+      for(unsigned i = 1; i < s.Ss[route + 1].size() - 1; i++)
+        nodes.push_back(s.Ss[route + 1][i]);
+      s.Ss[route + 1].clear();
+    }
+
+  for(unsigned i = 0; i < alpha[d][0].size(); i++)
+    {
+      s.coveredArea[alpha[d][0][i]]--;
+      // nodes.push_back(alpha[d][0][i]);
+      // for(unsigned j = 0; j < s.noInSs.size(); j++)
+      //   {
+      //     if(nodes.back() == s.noInSs[j])
+      //     {
+      //       s.noInSs.erase(s.noInSs.begin() + j);
+      //       break;
+      //     }
+      //   }
+    }
+
+  shuffle(nodes.begin(), nodes.end(), default_random_engine(seed));
+  s.Sd[d] = -1;
+  int w = 0, u = 0, v = 0;
+  for(unsigned i = 0; i < nodes.size(); i++)
+    {
+      w = nodes[i];
+      //cout << "node " << w  << endl;
+
+      float minimum = 9999999.9;
+      int here = -1;
+      for(auto c = 0; c < D * 2; c++)
+        {
+          d = c / 2;
+          // cout << "r" << c << endl;
+          if(s.Sd[d] == 0)
+            {
+              if(s.Ss[c].size() > 0)
+                {
+                  for(unsigned r = 0; r < s.Ss[c].size() - 1; r++)
+                    {
+                      u = s.Ss[c][r];
+                      v = s.Ss[c][r + 1];
+                      // cout << u << " " << v << "-> ";
+                      float newCost = t[u][w] + t[w][v] - t[u][v];
+                      // cout << newCost << " " << endl;
+                      if(newCost < minimum)
+                        {
+                          //cout << u << " " << v << "-> " << newCost << " " << endl;
+                          newCost = minimum;
+                          here = r;
+                          route = c;
+                        }
+
+                    }
+                }
+            }
+        }
+      if(here != -1)
+        {
+          //cout << "agrego " << w << endl;
+          s.Ss[route].insert(s.Ss[route].begin() + here + 1, w);
+          coveringAreaByNode(s, w);
+        }
+    }
+  // computeCost(s);
+  // print_sol(s);
+
+  // cout << "cA = ";
+
+  // for(auto i = 0; i < N; i++)
+  //   {
+  //     cout << s.coveredArea[i] << " ";
+  //   }
+  // cout << endl;
+
+  vector<int> missing;
+  vector<bool> mark(V, false);
+  for(unsigned i = 0; i < s.Ss.size(); i++)
+    {
+      if(s.Ss[i].size())
+        {
+          for(unsigned j = 0; j < s.Ss[i].size() - 1; j++)
+            mark[s.Ss[i][j]] = true;
+        }
+    }
+
+  // Nodes subset according to uncovered areas
+  for(auto i = 0; i < N; i++)
+    {
+      if(!s.coveredArea[i])
+        {
+          for(unsigned j = 0; j < bi[i].size(); j++)
+            {
+              int node = bi[i][j];
+              if(!mark[node])
+                {
+                  mark[node] = true;
+                  missing.push_back(node);
+                }
+            }
+        }
+    }
+  // cout << "missing: " << endl;
+
+  // for(unsigned i = 0; i < missing.size(); i++)
+  //   {
+  //     cout << missing[i] << " ";
+
+  //   }
+  // cout << endl;
+
+  if(missing.size())
+    {
+      //cout << "quedan (" << missing.size() << ")"<< endl;
+      // check if the solution is feasible
+      for(auto ii = 0; ii < N; ii++)
+        {
+          if(!s.coveredArea[ii])
+            {
+              for(auto i = missing.size() - 1; missing.size(); i--)
+                {
+                  int u, v, w;
+                  float minimum = 9999999.9;
+                  int here = -1, route = 0;
+                  w = missing.back();
+                  //cout << "arreglar " << w << endl;
+                  for(auto c = 0; c < D * 2; c++)
+                    {
+                      d = c / 2;
+                      // cout << "r" << c << endl;
+                      if(s.Sd[d] == 0)
+                        {
+                          if(s.Ss[c].size() > 0)
+                            {
+                              for(unsigned r = 0; r < s.Ss[c].size() - 1; r++)
+                                {
+                                  u = s.Ss[c][r];
+                                  v = s.Ss[c][r + 1];
+
+                                  // cout << u << " " << v << "-> ";
+                                  float newCost = t[u][w] + t[w][v] - t[u][v];
+                                  // cout << newCost << " " << endl;
+                                  if(newCost < minimum)
+                                    {
+                                      //cout << u << " " << v << "-> " << newCost << " " << endl;
+                                      newCost = minimum;
+                                      here = r;
+                                      route = c;
+                                    }
+
+                                }
+                            }
+                          // else
+                          //   {
+                          //     //cout << "no había y se agrega: " << d << " " << w << " " << d<< endl;
+                          //     s.Ss[c].push_back(d);
+                          //     s.Ss[c].push_back(w);
+                          //     coveringAreaByNode(s, w);
+                          //     s.Ss[c].push_back(d);
+                          //     missing.pop_back();
+                          //     w = missing.back();
+                          //     here = -1;
+                          //     break;
+                          //   }
+                        }
+                    }
+                  if(here != -1)
+                    {
+                      //cout << "agrego " << w << endl;
+
+                      s.Ss[route].insert(s.Ss[route].begin() + here + 1, w);
+                      coveringAreaByNode(s, w);
+                      //s.noInSs.erase(remove(s.noInSs.begin(), s.noInSs.end(), w), s.noInSs.end());
+                      s.noInSs[w] = true;
+                      missing.pop_back();
+                      ii = 0;
+                      break;
+                    }
+                }
+              // test = false;
+            }
+        }
+    }
+
+  // computeCost(s);
+  // print_sol(s);
+
+  //exit(0);
+
+}
 void ILS::computeRoute(Solution &s, vector<float> &c)
 {
   c = vector<float>(D * 2, 0);
@@ -1450,32 +1872,6 @@ bool ILS::LS_swap(Solution &s)
   vector<float> Cost;
   computeRoute(s, Cost);
   // print_sol(s);
-  // cout << "oli:" << endl;
-
-  // for(auto i = 0; i < Cost.size(); i++)
-  //   {
-  //     cout << i << " -> " << Cost[i] << endl;
-  //   }
-
-    // for(unsigned i = 0; i < s.Ss.size(); i++)
-    // {
-    //    if(i % 2 == 0)
-    //      cout << "Depot " << i / 2 << ": "<< endl;
-
-    //   cout << "\tRoute_" << i % 2 << ": ";
-    //   if(s.Ss[i].size())
-    //     {
-    //       float temp = 0.0;
-    //       for(unsigned j = 0; j < s.Ss[i].size() - 1; j++)
-    //         {
-    //            cout << s.Ss[i][j] << " ";
-    //           //temp += t[s.Ss[i][j]][s.Ss[i][j + 1]];
-    //         }
-    //       cout << s.Ss[i][s.Ss[i].size() - 1] << " ";
-    //       // cout << ": " << temp << endl;
-    //     }
-    //   cout << endl;
-    // }
   bool flag = false;
   for(unsigned i = 0; i < s.Ss.size(); i++)
     {
@@ -1521,22 +1917,22 @@ bool ILS::LS_swap(Solution &s)
                                       if(i != route && (e + f - a - b + Cost[i] < T) && (g + h - c - d + Cost[route] < T))
                                         opt = 1;
                                     }
-                                    else
-                                      {
-                                        //cout << "lalalala "  << e + f - a - b + g + h - c - d << endl;
+                                  else
+                                    {
+                                      //cout << "lalalala "  << e + f - a - b + g + h - c - d << endl;
 
-                                        if(s.Ss[route].size() > 3)
-                                          {
-                                            if((e + f - a - b + g + h - c - d < 0) && (e + f - a - b + Cost[i] < T) && (g + h - c - d + Cost[route] < T))
+                                      if(s.Ss[route].size() > 3)
+                                        {
+                                          if((e + f - a - b + g + h - c - d < 0) && (e + f - a - b + Cost[i] < T) && (g + h - c - d + Cost[route] < T))
                                             opt = 1;
-                                          }
-                                        else
-                                          {
-                                            if((e + f - a - b + g + h - c - d < 0) && (e + f - a - b + Cost[i] < T) && (g + h - c - d + Cost[route] < T))
-                                              opt = 1;
+                                        }
+                                      else
+                                        {
+                                          if((e + f - a - b + g + h - c - d < 0) && (e + f - a - b + Cost[i] < T) && (g + h - c - d + Cost[route] < T))
+                                            opt = 1;
 
-                                          }
-                                      }
+                                        }
+                                    }
                                 }
                               else
                                 {
@@ -1570,6 +1966,9 @@ bool ILS::LS_swap(Solution &s)
             }
         }
     }
+  // print_sol(s);
+  // cout << "end swap" << endl;
+
   return flag;
 }
 
@@ -1589,62 +1988,62 @@ bool ILS::removeNode(Solution &s)
   } while(s.Ss[route].size() == 0);
   // for(auto route = 0; route < s.Ss.size(); route++)
   //   if(s.Ss[route].size())
-    {
+  {
 
-  // cout << "recomputelalala" << endl;
+    // cout << "recomputelalala" << endl;
 
-  // for(auto ii = 0; ii < N; ii++)
-  //   cout << s.coveredArea[ii] << " ";
-  // cout << endl;
-      for(unsigned i = 1; i < s.Ss[route].size() - 1; i++)
-        {
-          if(s.Ss[route].size() > 3)
-            {
-              node = s.Ss[route][i];
-              bool flag = true;
-              //cout << node << endl;
-              for(unsigned j = 0; j < beta[node].size(); j++)
-                {
-                  area = beta[node][j];
-                  // cout << area << " ";
-                  if(s.coveredArea[area] < 2)
-                    {
-                      flag = false;
-                      break;
-                    }
-                }
-              // cout << endl;
-              if(flag)
-                {
-                  // cout << "se va " << endl;
-                  for(unsigned j = 0; j < beta[node].size(); j++) // decreasing covered areas
-                    {
-                      // cout << beta[node][j] << " " << endl;;
-                      s.coveredArea[beta[node][j]] -= 1;
+    // for(auto ii = 0; ii < N; ii++)
+    //   cout << s.coveredArea[ii] << " ";
+    // cout << endl;
+    for(unsigned i = 1; i < s.Ss[route].size() - 1; i++)
+      {
+        if(s.Ss[route].size() > 3)
+          {
+            node = s.Ss[route][i];
+            bool flag = true;
+            //cout << node << endl;
+            for(unsigned j = 0; j < beta[node].size(); j++)
+              {
+                area = beta[node][j];
+                // cout << area << " ";
+                if(s.coveredArea[area] < 2)
+                  {
+                    flag = false;
+                    break;
+                  }
+              }
+            // cout << endl;
+            if(flag)
+              {
+                // cout << "se va " << endl;
+                for(unsigned j = 0; j < beta[node].size(); j++) // decreasing covered areas
+                  {
+                    // cout << beta[node][j] << " " << endl;;
+                    s.coveredArea[beta[node][j]] -= 1;
 
-                      // for(auto ii = 0; ii < N; ii++)
-                      //   cout << s.coveredArea[ii] << " ";
-                      // cout << endl;
-                    }
-                  // cout << "que " << i << endl;
-                  s.Ss[route].erase(s.Ss[route].begin() + i); // remove node
-                  s.noInSs.push_back(node); // add to list noInSs
-                  i--;
-                }
-              // cout << endl;
+                    // for(auto ii = 0; ii < N; ii++)
+                    //   cout << s.coveredArea[ii] << " ";
+                    // cout << endl;
+                  }
+                // cout << "que " << i << endl;
+                s.Ss[route].erase(s.Ss[route].begin() + i); // remove node
+                s.noInSs[node] = false; // add to list noInSs
+                i--;
+              }
+            // cout << endl;
 
-              // for(auto ii = 0; ii < N; ii++)
-              //   cout << s.coveredArea[ii] << " ";
-              // cout << endl;
-              // computeCost(s);
-              // cout << "recompute" << endl;
+            // for(auto ii = 0; ii < N; ii++)
+            //   cout << s.coveredArea[ii] << " ";
+            // cout << endl;
+            // computeCost(s);
+            // cout << "recompute" << endl;
 
-              // for(auto ii = 0; ii < N; ii++)
-              //   cout << s.coveredArea[ii] << " ";
-              // cout << endl;
-            }
-        }
-    }
+            // for(auto ii = 0; ii < N; ii++)
+            //   cout << s.coveredArea[ii] << " ";
+            // cout << endl;
+          }
+      }
+  }
   //print_sol(s);
   // if all the nodes are removed so remove this route
   // if(s.Ss[route].size() == 2)
@@ -1744,66 +2143,75 @@ float ILS::computeCost(Solution &s)
           coveringAreaByDepot(s, i, s.Sd[i]);
         }
     }
-  // cout << "\nLcost: "<< s.Lcost << endl;
 
-  //temp
-  vector<bool> check(V, 0);
-  //temp
+  // cout << "\nLcost: "<< s.Lcost << endl;
+  for(auto i = D; i < V; i++)
+    s.noInSs[i] = false;
 
   // compute drones' routes
   int u = 0, v = 0;
   float routeCost = 0.0;
+  float routeCostReal = 0.0;
   s.Rcost = 0.0;
   s.feasible = 1;
   for(unsigned i = 0; i < s.Ss.size(); i++)
     {
+      if(s.Ss[i].size() > 0 && s.Sd[i / 2] != 0)
+        {
+          cout << "error this route is not watchtower" << endl;
+          print_sol(s);
+          exit(0);
+        }
+
       if(s.Ss[i].size())
         {
-          routeCost = 0.0;
+          routeCost = 0;
+          routeCostReal = C[0][3];
+
           for(unsigned j = 0; j < s.Ss[i].size() - 2; j++)
             {
               u = s.Ss[i][j];
               v = s.Ss[i][j + 1];
-              //cout << u << " " << v << endl;
+              // cout << u << " " << v << " " << t[u][v]<< endl;
               routeCost += t[u][v];
+              routeCostReal +=  0.02 * t[u][v];
               // cout << "covering node " << v << endl;
               coveringAreaByNode(s, v);
-              check[u] = 1;
-              check[v] = 1;
+              s.noInSs[u] = 1;
+              s.noInSs[v] = 1;
             }
           u = s.Ss[i][s.Ss[i].size() - 2];
           v = s.Ss[i][s.Ss[i].size() - 1];
-          check[u] = 1;
-          check[v] = 1;
+          s.noInSs[u] = 1;
+          s.noInSs[v] = 1;
 
           // Remove it after!
           if(v != s.Ss[i][0])
             {
               print_sol(s);
               cout << "error!!!!!!!!!!!!!!!!!!!!!" << endl;
-
               exit(0);
             }
 
           // cout << u << " " << v << endl;
           routeCost += t[u][v];
+          routeCostReal +=  0.02 * t[u][v];
           if(routeCost > T)
             s.feasible = 0;
-          s.Rcost += routeCost;
+          s.Rcost += routeCostReal;
         }
     }
 
 
-  for(unsigned i = 0; i < s.noInSs.size(); i++)
-    {
-      if(check[s.noInSs[i]])
-        {
-          cout << "it is repetead " << s.noInSs[i] << endl;
-          print_sol(s);
-          exit(0);
-        }
-
-    }
+  // for(auto i = D; i < V; i++)
+  //   {
+  //     if(check[i] != s.noInSs[i])
+  //       {
+  //         cout << "it is repetead " << i << endl;
+  //         print_sol(s);
+  //         exit(0);
+  //       }
+  //   }
 
   // cout << "Rcost: "<< s.Rcost << endl;
   // final cost
@@ -1823,8 +2231,10 @@ float ILS::computeCost(Solution &s)
       cout << "error big number !!!!!!!!!!!!!!!!!!!!!" << endl;
       exit(0);
     }
-
-  return s.Lcost + s.Rcost;
+  // cout << "oli" << endl;
+  //print_sol(s);
+  updateElite(s, s.cost);
+  return s.cost;
 }
 
 int ILS::rnd(unsigned low, unsigned high)
@@ -1859,15 +2269,16 @@ void ILS::print_sol(Solution &s)
               temp += t[s.Ss[i][j]][s.Ss[i][j + 1]];
             }
           cout << s.Ss[i][s.Ss[i].size() - 1] << " ";
-          cout << ": " << temp << endl;
+          cout << ": " << temp;
           cost += temp;
         }
       cout << endl;
     }
 
   cout << "noInSs = ";
-  for(unsigned i = 0; i < s.noInSs.size(); i++)
-    cout << s.noInSs[i] << " ";
+  for(auto i = D; i < V; i++)
+    if(!s.noInSs[i])
+    cout << i << " ";
   cout << endl;
 
   cout << "cA = ";
