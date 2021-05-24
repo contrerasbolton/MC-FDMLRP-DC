@@ -13,18 +13,17 @@ int B;
 int ND;
 float T;
 int V;
+float costUAV;
 int *mMax;
 int *mMin;
 float *techCost;
 int *WTe;
 float **C;
 int **beta;
-int **alpha;
 float **t;
 float distSum;
 string nameInstance;
-vector<vector<vector<int> > > a; // simple alpha
-vector<vector<int> > a2; // simple alpha
+vector<vector<vector<int> > > a; // eliminar
 vector<vector<int> > b; // simple beta
 vector<vector<int> > bi; // inverse beta
 
@@ -59,7 +58,7 @@ void readInstance(const char *instance)
   if(!fscanf(file, "%d %f %d %d", &ND, &T, &mMin[0], &mMax[0]))
     printError("reading error in ND, T, Min and Max of watchtowers/ballons ");
 
-  techCost = new float[4]; // Cost = {Watchtowers, Ballons, ?, drone}
+  techCost = new float[4]; // Cost = {Watchtowers, Ballons, Existing watchtowers, Drone}
   if(!fscanf(file, "%f %f %f %f", &techCost[0], &techCost[1], &techCost[2], &techCost[3]))
     printError("reading error in Costs");
 
@@ -84,9 +83,6 @@ void readInstance(const char *instance)
           b[id].push_back(temp);
         }
     }
-
-  for(auto i = 0; i < WD; i++)
-    a2.push_back(vector<int>());
 
   t = new float*[V];
   for(auto i = 0; i < V; i++)
@@ -143,10 +139,10 @@ void readInstance(const char *instance)
   for(auto i = 0; i < WD; i++)
     {
       C[i] = new float[4];
-      C[i][0] = techCost[0];
-      C[i][1] = techCost[1];
-      C[i][2] = techCost[2];
-      C[i][3] = techCost[3];
+      C[i][0] = techCost[0]; // wt cost
+      C[i][1] = techCost[1]; // ball cost
+      C[i][2] = techCost[2]; // wte cost
+      C[i][3] = techCost[3]; // drone cost
     }
 
   // for(auto i = 0; i < S; i++)
@@ -171,12 +167,12 @@ void readInstance(const char *instance)
   //       cout << t[i][j] << " ";
   //     cout << endl;
   //   }
+  costUAV = 0.02;
   cout << "reading is ok" << endl;
 }
 
 void solveMILP(int opt)
 {
-  float costUAV = 0.02;
   IloEnv env;
   try
     {
@@ -696,6 +692,7 @@ void solveMILP(int opt)
       cplex.setParam(IloCplex::Param::Threads, 1);
       cplex.setParam(IloCplex::Param::TimeLimit, timeLimit);
       cplex.setParam(IloCplex::Param::MIP::Limits::TreeMemory, memoryLimit);
+      cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, 1e-07);
       // Solve
       if(!cplex.solve())
         {
@@ -859,7 +856,7 @@ void callILS(int opt)
   cout << "ILS is running" << endl;
   // initial cost, cost obtained, computing time
   float result[3] = {0.0, 0.0, 0.0};
-  ILS *ils = new ILS(seed, N, D, K, S, B, beta, ND, T, V, distSum, a, b, bi, t, mMax, mMin, C);
+  ILS *ils = new ILS(seed, N, D, We, W, S, B, beta, ND, T, V, distSum, b, bi, t, mMax, mMin, C, costUAV);
   ils->run(&result[0]);
   delete ils;
   cout << result[0] << "\t" << result[1] << "\t" << result[2] << endl;
@@ -876,12 +873,25 @@ void callILS(int opt)
   fclose(file);
 }
 
-void callMatheuristic()
+void callMatheuristic(int opt)
 {
   cout << "Matheuristic is running" << endl;
-  ILS *ils = new ILS(seed, N, D, K, S, B, beta, ND, T, V, distSum, a, b, bi, t, mMax, mMin, C);
-  ils->runMH();
+  float result[3] = {0.0, 0.0, 0.0};
+  ILS *ils = new ILS(seed, N, D, We, W, S, B, beta, ND, T, V, distSum, b, bi, t, mMax, mMin, C, costUAV);
+  ils->runMH(&result[0]);
   delete ils;
+  cout << result[0] << "\t" << result[1] << "\t" << result[2] << endl;
+  FILE *file;
+  stringstream ss;
+  string s;
+  string output = "summary_" + to_string(opt) + ".txt";
+  if((file = fopen(output.c_str(), "a")) == NULL)
+    {
+      printf("Error in reading of the %s \n", output.c_str());
+      exit(0);
+    }
+  fprintf(file, "%s\t%f\t%f\t%f\t\n", nameInstance.c_str(), result[0], result[1], result[2]);
+  fclose(file);
 }
 
 
@@ -908,7 +918,7 @@ int main(int argc, char *argv[])
   readInstance(name.c_str());
 
   if(opt == 7)
-    callMatheuristic();
+    callMatheuristic(opt);
   else if(opt == 6)
     callILS(opt);
   else
