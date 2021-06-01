@@ -33,6 +33,10 @@ elif [ "$TYPE" = "MH" ]
 then
     algorithm=6
     endSeed=9
+elif [ "$TYPE" = "MH2" ]
+then
+    algorithm=7
+    endSeed=9
 else
     echo "algorithm does not exist"
     exit

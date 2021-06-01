@@ -207,6 +207,15 @@ void solveMILP(int opt)
           name.str("");
         }
 
+      // decision variables w
+      IloNumVarArray w(env, V);
+      for(auto i = 0; i < V; i++)
+        {
+          name << "w_" << i;
+          w[i] = IloNumVar(env, 0, IloInfinity, IloNumVar::Int, name.str().c_str());
+          name.str("");
+        }
+
       // decision variables u
       IloNumVarArray u(env, V);
       // decision variables g
@@ -240,14 +249,6 @@ void solveMILP(int opt)
                     name.str("");
                   }
             }
-        }
-      // decision variables w
-      IloNumVarArray w(env, V);
-      for(auto i = 0; i < V; i++)
-        {
-          name << "w_" << i;
-          w[i] = IloNumVar(env, 0, IloInfinity, IloNumVar::Int, name.str().c_str());
-          name.str("");
         }
 
       // decision variables y
@@ -408,10 +409,7 @@ void solveMILP(int opt)
           for(auto j = D; j < V; j++)
             exp += x[d][j];
 
-          if(d < D)
-            exp -= 0;
-          else
-            exp -= ND * y[d];
+          exp -= ND * y[d];
       	  name << "constraint7_" << d;
       	  constraint7[d - D] = IloRange(env, -IloInfinity, exp, 0, name.str().c_str());
       	  name.str("");
@@ -789,11 +787,6 @@ void solveMILP(int opt)
             }
         }
 
-      cout << "w: ";
-      for(auto i = 0; i < V; i++)
-        cout << cplex.getValue(w[i]) << " ";
-      cout << endl;
-
       float LB = cplex.getBestObjValue();
       float totalTime = cplex.getTime();
       float DroneCost = nDrones * techCost[3];
@@ -807,6 +800,7 @@ void solveMILP(int opt)
       IloAlgorithm::Status status = cplex.getStatus();
 
       cout << "Instance            = " << nameInstance << endl;
+      cout << "T                   = " << T << endl;
       cout << "LB                  = " << LB << endl;
       cout << "Total Cost          = " << totalCost << " " << cplex.getObjValue() << endl;
       if(opt > 3)
@@ -837,8 +831,8 @@ void solveMILP(int opt)
           printf("Error in reading of the %s \n", output.c_str());
           exit(0);
         }
-      fprintf(file, "%s\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%f\t%f\t%f\t%f\t%f\t%f\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\n",
-              nameInstance.c_str(), N, S, D, We, W, B, s.c_str(), LB, totalCost, routeCost, wtCost, ballCost, DroneCost, totalCover, sumL, sumP, ballons, ewatchtowers,
+      fprintf(file, "%s\t%f\t%d\t%d\t%d\t%d\t%d\t%d\t%s\t%f\t%f\t%f\t%f\t%f\t%f\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\n",
+              nameInstance.c_str(), T, N, S, D, We, W, B, s.c_str(), LB, totalCost, routeCost, wtCost, ballCost, DroneCost, totalCover, sumL, sumP, ballons, ewatchtowers,
               watchtowers, nDrones, gap, totalTime);
       fclose(file);
 
