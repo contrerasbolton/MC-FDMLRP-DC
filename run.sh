@@ -5,7 +5,8 @@ TYPE=$1
 INSTANCE=$2
 I=$3
 J=$4
-
+time=$5
+memory=$6
 OUTPUT="output/"
 start=0
 end=0
@@ -47,7 +48,7 @@ then
     if [ "$I" = "" ]
     then
 	start=1
-	end=15
+	end=10
     elif [ "$I" != "" ] && [ "$J" != "" ]
     then
 	start=$I
@@ -77,10 +78,13 @@ fi
 
 for i in `seq $start $end`;
 do
-    for seed in `seq $startSeed $endSeed`;
+    for k in {1..2};
     do
-	run="./drone $INSTANCE$i.dat $algorithm $seed"
-	echo "$seed $run > $OUTPUT$INSTANCE$i"_"$TYPE.txt"
-	$run > $OUTPUT$INSTANCE$i"_"$TYPE.txt
-    done
+        for seed in `seq $startSeed $endSeed`;
+		do
+		run="./drone $INSTANCE$i.$k.dat $algorithm $seed $time $memory"
+		echo "$seed $run > $OUTPUT$INSTANCE$i.$k"_"$TYPE.txt"
+		$run > $OUTPUT$INSTANCE$i.$k"_"$TYPE.txt
+		done
+	done
 done;

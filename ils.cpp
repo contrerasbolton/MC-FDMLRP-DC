@@ -2,7 +2,7 @@
 #include "ils.hpp"
 
 unsigned sizeElite = 30;
-
+unsigned decipresi = 10;
 ILS::ILS(int seed, int N, int D, int We, int W, int S, int B, int **beta, int ND, float T, int V, float M,
          vector<vector<int> > &b, vector<vector<int> > &bi, float **t, int *mMax, int *mMin, float **C, float costUAV)
 {
@@ -12,7 +12,6 @@ ILS::ILS(int seed, int N, int D, int We, int W, int S, int B, int **beta, int ND
   this->We = We;
   this->W = W;
   this->WD = D + We + W;
-  this->K = 0; // eliminar
   this->S = S;
   this->B = B;
   this->ND = ND;
@@ -31,9 +30,6 @@ ILS::ILS(int seed, int N, int D, int We, int W, int S, int B, int **beta, int ND
   // Initialize
   generator.seed(seed);
   randValue = uniform_real_distribution<double>(0.0, 1.0);
-  // solution.Sd = new int[D];
-  // for(auto i = 0; i < D; i++)
-  //   solution.Sd[i] = 1;
 }
 
 ILS::~ILS()
@@ -84,8 +80,11 @@ bool ILS::initialSolution(Solution &s)
   for(auto i = 0; i < N; i++)
     s.coveredArea[i] = 0;
 
+  for(auto i = D; i < We; i++)
+    s.Sd[i] = 1;
+
   // reset depot
-  for(auto i = 0; i < WD; i++)
+  for(auto i = D + We; i < WD; i++)
     s.Sd[i] = rnd(0, 1);
 
   // at least one wt actived
@@ -101,12 +100,14 @@ bool ILS::initialSolution(Solution &s)
     }
   if(atLeast)
     {
-      d = rnd(D, WD - 1);
+      if(We > 0)
+        d = D + We;
+      else
+        d = rnd(D, WD - 1);
       s.Sd[d] = 1;
     }
 
-
-  // cout << "Sd" << endl;
+  // covering areas
   for(auto i = 0; i < WD; i++)
     if(s.Sd[i])
       coveringAreaByNode(s, i);
@@ -127,7 +128,6 @@ bool ILS::initialSolution(Solution &s)
   // cout << endl;
 
   vector<int> nodes;
-  //ector<bool> mark(V, false);
   for(auto i = 0; i < V; i++)
     s.noInSs[i] = false;
 
@@ -174,8 +174,12 @@ bool ILS::initialSolution(Solution &s)
           while(nodes.size())
             {
               u = nodes.back();
-              v = nodes[nodes.size() - 2];
-              if(routeCost + t[u][v] <= T)
+              if(nodes.size() > 1)
+                v = nodes[nodes.size() - 2];
+              else
+                v = -1;
+              //cout << u << " " << v << " " << endl;
+              if(v != -1 && routeCost + t[u][v] <= T)
                 {
                   routeCost += t[u][v];
                   coveringAreaByNode(s, u);
@@ -342,21 +346,6 @@ bool ILS::initialSolution(Solution &s)
   for(unsigned i = 0; i < nodes.size(); i++)
     s.noInSs[nodes[i]] = false;
 
-  // for(auto i = D; i < V; i++)
-  //   {
-  //     s.noInSs[i] = false;
-  //     if(mark[i])
-  //       s.noInSs[i]
-  //   }
-
-  // if(lastPosition < S)
-  //   {
-  //     s.noInSs.clear();
-  //     for(auto i = lastPosition; i < S; i++)
-  //       s.noInSs.push_back(nodes[i]);
-  //   }
-  // cout << "aqui en initial solution" << endl;
-
   // for(auto i = 0; i < N; i++)
   //   cout << s.coveredArea[i] << " ";
   // cout << endl;
@@ -369,30 +358,495 @@ bool ILS::initialSolution(Solution &s)
   return true;
 }
 
-void ILS::copyS(Solution &give, Solution &receive)
+float ILS::coveringSolver(Solution &s, float add)
 {
-  receive.feasible = give.feasible;
-  receive.Lcost = give.Lcost;
-  receive.Rcost = give.Rcost;
-  receive.cost = give.cost;
+  IloEnv env;
+
+  // All locations are fixed to 1
   for(auto i = 0; i < WD; i++)
-    receive.Sd[i] = give.Sd[i];
+    s.Sd[i] = 1;
 
+  // covering areas
+  for(auto i = 0; i < WD; i++)
+    if(s.Sd[i])
+      coveringAreaByNode(s, i);
+
+  vector<vector<int> > nodesByAreas(N);
+
+  // Nodes subset according to uncovered areas
   for(auto i = 0; i < N; i++)
-    receive.coveredArea[i] = give.coveredArea[i];
-
-  for(auto i = 0; i < V; i++)
-    receive.noInSs[i] = give.noInSs[i];
-
-  for(unsigned i = 0; i < give.Ss.size(); i++)
     {
-      receive.Ss[i].clear();
-      for(unsigned j = 0; j < give.Ss[i].size(); j++)
-        receive.Ss[i].push_back(give.Ss[i][j]);
+      if(!s.coveredArea[i])
+        {
+          for(unsigned j = 0; j < bi[i].size(); j++)
+            {
+              int node = bi[i][j];
+              if(node >= WD && !s.noInSs[node])
+                {
+                  // s.noInSs[node] = true;
+                  nodesByAreas[i].push_back(node);
+                }
+            }
+        }
     }
+  int count = 0;
+  for(auto i = 0; i < N; i++)
+    if(nodesByAreas[i].size())
+      count++;
+
+  // for(auto i = 0; i < N; i++)
+  //   {
+  //     cout << "Area " << i << ": ";
+  //     for(unsigned j = 0; j < nodesByAreas[i].size(); j++)
+  //       {
+  //         cout << nodesByAreas[i][j] << " ";
+  //       }
+  //     cout << endl;
+  //   }
+  try
+    {
+      IloModel model(env);
+      stringstream name;
+
+      IloNumVarArray y(env, V);
+      for(auto i = 0; i < V; i++)
+        {
+          name << "y_" << i;
+          y[i] = IloNumVar(env, 0, 1, IloNumVar::Bool, name.str().c_str());
+          name.str("");
+        }
+
+      IloCplex cplex(model);
+      IloExpr fo(env);
+
+
+      for(auto i = 0; i < V; i++)
+        fo += y[i];
+
+      model.add(IloMinimize(env, fo));
+
+      IloRangeArray constraint(env, count);
+      for(auto i = 0, k = 0; i < N; i++)
+        {
+          if(nodesByAreas[i].size())
+            {
+              IloExpr exp(env);
+              for(unsigned j = 0; j < nodesByAreas[i].size(); j++)
+                exp += y[nodesByAreas[i][j]];
+              name << "constraint3_" << i;
+              constraint[k] = IloRange(env, 1, exp, IloInfinity, name.str().c_str());
+              name.str("");
+              k++;
+            }
+        }
+      model.add(constraint);
+
+      // cplex.exportModel("model2.lp");
+      cplex.setParam(IloCplex::Param::Threads, 1);
+      if(!cplex.solve())
+        {
+        }
+      int V2 = cplex.getObjValue();
+      float routingTime = cplex.getTime();
+      cout << "UB   = " << V2 << endl;
+      cout << "LB " << cplex.getBestObjValue() << endl;
+      cout << "time = " << routingTime << endl;
+      cout << "y: ";
+      vector<int> nickname(WD, 0);
+      for(auto i = 0; i < WD; i++)
+        nickname[i] = i;
+      for(auto i = 0; i < V; i++)
+        {
+          if(cplex.getValue(y[i]) > 0.9)
+            {
+              nickname.push_back(i);
+              cout << i << endl;
+            }
+        }
+
+      V2 = V2 + WD;
+      // decision variables x
+      IloArray<IloNumVarArray> x(env, V2);
+      for(auto i = 0; i < V2; i++)
+        {
+          x[i] = IloNumVarArray(env, V2);
+          for(auto j = 0; j < V2; j++)
+            {
+              name << "x_" << i << "_" << j;
+              x[i][j] = IloNumVar(env, 0, 1, IloNumVar::Bool, name.str().c_str());
+              name.str("");
+            }
+        }
+
+      // decision variables w
+      IloNumVarArray w(env, V2);
+      for(auto i = 0; i < V2; i++)
+        {
+          name << "w_" << i;
+          w[i] = IloNumVar(env, 0, IloInfinity, IloNumVar::Int, name.str().c_str());
+          name.str("");
+        }
+
+
+      IloModel model2(env);
+      IloCplex cplex2(model2);
+
+      IloExpr fo2(env);
+      // route cost
+      for(auto i = D; i < V2; i++)
+        for(auto j = D; j < V2; j++)
+          if(i != j)
+            fo2 +=  t[nickname[i]][nickname[j]] * x[i][j];
+
+      model2.add(IloMinimize(env, fo2));
+
+      // Drone routing constraints
+      // Constraints 7) \Sum_{k in K} y_{dk} <= M_k, for all d in D
+      IloRangeArray constraint7(env, WD - D);
+      for(auto d = D; d < WD; d++)
+      	{
+      	  IloExpr exp(env);
+          for(auto j = D; j < V2; j++)
+            exp += x[d][j];
+
+          if(d < D)
+            exp -= 0;
+          else
+            exp -= ND;
+      	  name << "constraint7_" << d;
+      	  constraint7[d - D] = IloRange(env, -IloInfinity, exp, 0, name.str().c_str());
+      	  name.str("");
+      	}
+      model2.add(constraint7);
+
+      // Constraints 8) \Sum_{j in V} x_{dj} - \Sum_{j in V} x_{jd} = 0, for all d in D
+      IloRangeArray constraint8(env, WD - D);
+      for(auto d = D; d < WD; d++)
+        {
+          IloExpr sum1(env);
+          for(auto j = D; j < V2; j++)
+            sum1 += x[j][d];
+
+          IloExpr sum2(env);
+          for(auto j = D; j < V2; j++)
+            sum2 += x[d][j];
+
+          name << "constraint8_" << d;
+      	  constraint8[d - D] = IloRange(env, 0, sum2 - sum1, 0, name.str().c_str());
+      	  name.str("");
+        }
+      model2.add(constraint8);
+
+      // Constraints 9) \Sum_{j in V} x_{ij} = v_i, for all i in S
+      for(auto i = WD; i < V2; i++)
+        {
+          IloExpr sum(env);
+          for(auto j = D; j < V2; j++)
+            sum += x[i][j];
+          name << "constraint9_" << i;
+          model2.add(IloRange(env, 1, sum, 1, name.str().c_str()));
+          name.str("");
+        }
+
+      // Constraints 10) \Sum_{j in V} x_{ji} = v_i, for all i in S
+      for(auto i = WD, c = 0; i < V2; i++, c++)
+        {
+          IloExpr sum(env);
+          for(auto j = D; j < V2; j++)
+            sum += x[j][i];
+          name << "constraint10_" << i;
+          model2.add(IloRange(env, 1, sum, 1, name.str().c_str()));
+          name.str("");
+        }
+
+      // decision variables g
+      IloArray<IloNumVarArray> g(env, V2);
+
+      for(auto i = 0; i < V2; i++)
+        {
+          g[i] = IloNumVarArray(env, V2);
+          for(auto j = 0; j < V2; j++)
+            if(i != j)
+              {
+                name << "g_" << i << "_" << j;
+                g[i][j] = IloNumVar(env, 0, IloInfinity, IloNumVar::Float, name.str().c_str());
+                name.str("");
+              }
+        }
+
+      // Constraints 11) \Sum_{j in V} g_{ij} - \Sum_{j in V} g_{ji} == \Sum_{j in V} t_{ij} * x_{ij}, for all i in S,x i != j
+      IloRangeArray  constraint11(env, V2 - WD);
+      for(auto i = WD, c = 0; i < V2; i++, c++)
+        {
+          IloExpr sum1(env);
+          for(auto j = D; j < V2; j++)
+            if(i != j)
+              sum1 += g[i][j];
+
+          IloExpr sum2(env);
+          for(auto j = D; j < V2; j++)
+            if(i != j)
+              sum2 += g[j][i];
+
+          IloExpr sum3(env);
+          for(auto j = D; j < V2; j++)
+            if(i != j)
+              sum3 += t[nickname[i]][nickname[j]] * x[i][j];
+
+          name << "constraint11_" << i;
+          constraint11[c] = IloRange(env, 0, sum1 - sum2 - sum3, 0, name.str().c_str());
+          name.str("");
+        }
+      model2.add(constraint11);
+
+      IloArray<IloRangeArray> constraint12a(env, V2);
+      for(auto i = WD; i < V2; i++)
+        {
+          constraint12a[i] = IloRangeArray(env, V2);
+          for(auto j = WD; j < V2; j++)
+            {
+              if(i != j)
+                {
+                  name << "constraint12_UB" << i << "_" << j;
+                  constraint12a[i][j] = IloRange(env, -IloInfinity, g[i][j] - (T + add) * x[i][j], 0, name.str().c_str());
+                  name.str("");
+                  model2.add(constraint12a[i][j]);
+                }
+            }
+        }
+
+      IloArray<IloRangeArray> constraint12b(env, V2);
+      for(auto i = WD; i < V2; i++)
+        {
+          constraint12b[i] = IloRangeArray(env, V2);
+          for(auto j = WD; j < V2; j++)
+            {
+              if(i != j)
+                {
+                  name << "constraint12_LB_" << i << "_" << j;
+                  constraint12b[i][j] = IloRange(env, 0, g[i][j] - x[i][j] * t[nickname[i]][nickname[j]], IloInfinity, name.str().c_str());
+                  name.str("");
+                  model2.add(constraint12b[i][j]);
+                }
+            }
+        }
+
+      IloArray<IloRangeArray> constraint13(env, WD);
+      for(auto i = D; i < WD; i++)
+        {
+          constraint13[i] = IloRangeArray(env, V2);
+          for(auto j = D; j < V2; j++)
+            {
+              if(i != j)
+                {
+                  name << "constraint13_LB_" << i << "_" << j;
+                  constraint13[i][j] = IloRange(env, 0, g[i][j] - x[i][j] * t[nickname[i]][nickname[j]], 0, name.str().c_str());
+                  name.str("");
+                  model2.add(constraint13[i][j]);
+                }
+            }
+        }
+
+      IloArray<IloRangeArray> constraint13b(env, V2);
+      for(auto i = D; i < V2; i++)
+        {
+          constraint13b[i] = IloRangeArray(env, WD);
+          for(auto j = D; j < WD; j++)
+            {
+              if(i != j)
+                {
+                  name << "constraint13_UB_" << i << "_" << j;
+                  constraint13b[i][j] = IloRange(env, -IloInfinity, g[i][j] - x[i][j] * (T + add), 0, name.str().c_str());
+                  name.str("");
+                  model2.add(constraint13b[i][j]);
+                }
+            }
+        }
+
+
+      // // // Constraints 14) \Sum_{j in S} beta_{ji} * v_j >= P_i
+      // // IloRangeArray constraint14(env, N);
+      // // for(auto i = 0; i < N; i++)
+      // //   {
+      // //     IloExpr exp(env);
+      // //     for(auto j = WD; j < V; j++)
+      // //       exp += b[j][i] * v[j - WD];
+      // //     exp -= 1;
+      // //     name << "constraint14_" << i;
+      // //     constraint14[i] = IloRange(env, 0, exp, IloInfinity, name.str().c_str());
+      // //     name.str("");
+      // //   }
+      // // model2.add(constraint14);
+
+      // Constraints 15) w_d = d, for all d in D
+      IloRangeArray constraint15(env, WD);
+      for(auto d = 0; d < WD; d++)
+        {
+          name << "constraint15_" << d;
+      	  constraint15[d] = IloRange(env, d, w[d], d, name.str().c_str());
+      	  name.str("");
+        }
+      model2.add(constraint15);
+
+      // Constraints 16) w_i +- w_j < = (D - 1)  * (1 - x_{ji}), for all i in S, j in V, i != j
+      IloArray<IloRangeArray> constraint16(env, V2);
+      for(auto i = D; i < V2; i++)
+        {
+          constraint16[i] = IloRangeArray(env, V2);
+          for(auto j = D; j < V2; j++)
+            {
+              if(i != j)
+                {
+                  name << "constraint16_" << i << " " << j;
+                  constraint16[i][j] = IloRange(env, -IloInfinity, w[i] - w[j] - (WD - 1) * (1 - x[i][j]), 0, name.str().c_str());
+                  name.str("");
+                  model2.add(constraint16[i][j]);
+                }
+            }
+        }
+
+      // Constraints 17) w_j +- w_i < = (D - 1)  * (1 - x_{ji}), for all i in S, j in V, i != j
+      IloArray<IloRangeArray> constraint17(env, V2);
+      for(auto i = D; i < V2; i++)
+        {
+          constraint17[i] = IloRangeArray(env, V2);
+          for(auto j = D; j < V2; j++)
+            {
+              if(i != j)
+                {
+                  name << "constraint17_" << i << " " << j;
+                  constraint17[i][j] = IloRange(env, -IloInfinity, w[j] - w[i] - (WD - 1) * (1 - x[i][j]), 0, name.str().c_str());
+                  name.str("");
+                  model2.add(constraint17[i][j]);
+                }
+            }
+        }
+
+      // Constraints 18) x_{ij} = 0, for all i in D, j in D
+      IloArray<IloRangeArray> constraint18(env, WD);
+      for(auto i = D; i < WD; i++)
+        {
+          constraint18[i] = IloRangeArray(env, WD);
+          for(auto j = D; j < WD; j++)
+            {
+              if(i != j)
+                {
+                  name << "constraint18_" << i << " " << j;
+                  constraint18[i][j] = IloRange(env, 0, x[i][j], 0, name.str().c_str());
+                  name.str("");
+                  model2.add(constraint18[i][j]);
+                }
+            }
+        }
+      // // // Constraints 19) L_i + P_i <= 1, for all i in N
+      // // IloRangeArray constraint19(env, N);
+      // // for(auto i = 0; i < N; i++)
+      // //   {
+      // //     name << "constraint19_" << i;
+      // // 	  constraint19[i] = IloRange(env, -IloInfinity, L[i] + P[i], 1, name.str().c_str());
+      // // 	  name.str("");
+      // //   }
+      // // model2.add(constraint19);
+
+      for(auto i = D; i < V2; i++)
+        model2.add(x[i][i] == 0);
+
+      int timeLimit = 10;
+      // cplex2.exportModel("model3.lp");
+      cplex2.setParam(IloCplex::Param::Threads, 1);
+      cplex2.setParam(IloCplex::Param::TimeLimit, timeLimit);
+      if(!cplex2.solve())
+        {
+          cout << "can't solve'" << endl;
+          env.end();
+          return false;
+        }
+      int routingCost = cplex2.getObjValue();
+      routingTime = cplex2.getTime();
+      cout << "UB   = " << routingCost << endl;
+      cout << "LB " << cplex2.getBestObjValue() << endl;
+      cout << "time = " << routingTime << endl;
+
+      for(auto i = D; i < V2; i++)
+        {
+          for(auto j = D; j < V2; j++)
+            {
+              if(cplex2.getValue(x[i][j]) > 0.9)
+                {
+                  cout << "x'[" << i << "][" << j << "] = " << "x[" << nickname[i] << "][" << nickname[j] << "] = "
+                       << cplex2.getValue(x[i][j]) << " -> " << t[nickname[i]][nickname[j]] << endl;
+                }
+            }
+        }
+      vector<bool> check(V, true);
+      // for(auto c = 0; c < WD * 2; c++)
+      //   s.Ss[c].clear();
+      int route = 0;
+
+      cout << "oli en solvercover" << endl;
+      for(auto i = D; i < WD; i++)
+        {
+          for(auto j = WD; j < V2; j++)
+            {
+              // cout << i << " " << j << endl;
+              if(cplex2.getValue(x[i][j]) > 0.9)
+                {
+                  route = i * 2;
+                  int u = i, v = j;
+                  if(s.Ss[route].size())
+                    route++;
+                  while(v < V)
+                    {
+                      if(cplex2.getValue(x[u][v]) > 0.9)
+                        {
+                          //cout << "(" << u << ", " << v << ") ";
+                          s.Ss[route].push_back(u);
+                          check[u] = 0;
+                          if(v < WD)
+                            {
+                              // cout << "(" << u << ", " << v << ") " << endl;
+                              // cout << "*" << endl;
+
+                              s.Ss[route].push_back(v);
+                              //i = route;
+
+                              // route++;
+                              break;
+                            }
+                          u = v;
+                          v = D - 1;
+                        }
+                      v++;
+                    }
+                }
+            }
+        }
+      for(auto d = D * 2; d < WD * 2; d++)
+        {
+          if(s.Ss[d].size())
+            {
+              for(unsigned i = 0; i < s.Ss[d].size() - 1; i++)
+                {
+                  s.Ss[d][i] = nickname[s.Ss[d][i]];
+                }
+            }
+        }
+      // computeCost(s);
+      // print_sol(s);
+      env.end();
+      return true;
+    } catch (IloException& ex) {
+    cerr << "Error: " << ex << endl;
+    exit(0);
+  }
+  catch (...) {
+    cerr << "Error" << endl;
+  }
+  env.end();
+  return true;
 }
 
-float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Solution &s, bool flag, bool initSol, bool original)
+float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Solution &s, bool flag, bool initSol, bool original, int tries, bool fixed)
 {
   cout << "Sd:" << endl;
 
@@ -430,7 +884,6 @@ float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Soluti
   IloEnv env;
   try
     {
-      IloModel model1(env);
       stringstream name;
 
       // decision variables L
@@ -495,6 +948,7 @@ float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Soluti
 
       // decision variables x
       IloArray<IloNumVarArray> x(env, V);
+
       for(auto i = 0; i < V; i++)
         {
           x[i] = IloNumVarArray(env, V);
@@ -873,7 +1327,31 @@ float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Soluti
           // exit(0);
 
         }
-
+      // fixed variables
+      if(fixed)
+        {
+          vector<float> values(V, -1);
+          int nfixed = 0, ntotal = 0;
+          for(unsigned i = D; i < s.noInSs.size(); i++)
+            {
+              if(!s.noInSs[i])
+                {
+                  values[i] = randValue(generator);
+                  ntotal++;
+                }
+              //cout << i << " " << values[i] << endl;
+            }
+          for(auto i = D; i < V; i++)
+            {
+              if(values[i] > 0 && values[i] < 0.6)
+                {
+                  nfixed++;
+                  for(auto j = D; j < V; j++)
+                    model2.add(x[i][j] == 0);
+                }
+            }
+          cout << "There are " << nfixed << " / " << ntotal << " variables fixed " << endl;
+        }
 
       // Cplex Parameters
       //timeLimit = 10;
@@ -881,18 +1359,16 @@ float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Soluti
       cplex2.setParam(IloCplex::Param::Threads, 1);
       cplex2.setParam(IloCplex::Param::TimeLimit, timeLimit);
       cplex2.setParam(IloCplex::Param::Emphasis::MIP, 1);
-      cplex2.setParam(IloCplex::Param::MIP::Limits::Solutions, 2);
-      cplex2.use(timeLimitCallback(env, cplex2, IloFalse, cplex2.getCplexTime(), timeLimit, currentUB));
+      cplex2.setParam(IloCplex::Param::MIP::Limits::Solutions, tries);
+      // cplex2.use(timeLimitCallback(env, cplex2, IloFalse, cplex2.getCplexTime(), timeLimit, currentUB));
       // cplex2.setOut(env.getNullStream());
       // cplex2.setParam(IloCplex::Param::MIP::Display, 0);
       // Solve
       if(!cplex2.solve())
         {
           cout << "UB = " << currentUB << endl;
-
           cout << "can't solve'" << endl;
-          //exit(0);
-
+          env.end();
           return Infinity;
         }
       float routingCost = cplex2.getObjValue();
@@ -901,19 +1377,27 @@ float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Soluti
       cout << "LB " << cplex2.getBestObjValue() << endl;
       cout << "time = " << routingTime << endl;
 
-      cout << "flag begin" << endl;
       if(flag)
         {
-          // reset routes
-          //s.noInSs.clear();
-
           vector<bool> check(V, true);
-
           for(auto c = 0; c < WD * 2; c++)
             s.Ss[c].clear();
+
+          s.Sd.clear();
+
           int route = 0;
           for(auto i = 0; i < WD; i++)
-            s.Sd[i] = cplex2.getValue(y[i]);
+            s.Sd.push_back(cplex2.getValue(y[i]));
+
+          cout << "y: ";
+          for(auto i = 0; i < WD; i++)
+            cout << cplex2.getValue(y[i]) <<  " ";
+          cout << endl;
+          cout << "Sd: ";
+          for(auto i = 0; i < WD; i++)
+            cout << s.Sd[i] << " ";
+          cout << endl;
+
 
           cout << "x: " << endl;
           for(auto i = D; i < V; i++)
@@ -966,42 +1450,38 @@ float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Soluti
             }
         }
 
-      cout << "P: ";
-      for(auto i = 0; i < N; i++)
-        cout << cplex2.getValue(P[i]) << " ";
-      cout << endl;
+      // cout << "P: ";
+      // for(auto i = 0; i < N; i++)
+      //   cout << cplex2.getValue(P[i]) << " ";
+      // cout << endl;
 
-      cout << "L: ";
-      for(auto i = 0; i < N; i++)
-        cout << cplex2.getValue(L[i]) << " ";
-      cout << endl;
+      // cout << "L: ";
+      // for(auto i = 0; i < N; i++)
+      //   cout << cplex2.getValue(L[i]) << " ";
+      // cout << endl;
 
-      cout << "x: " << endl;
-      float routeCost = 0.0;
-      for(auto i = D; i < V; i++)
-        {
-          for(auto j = D; j < V; j++)
-            {
-              if(cplex2.getValue(x[i][j]) > 0.9)
-                {
-                  routeCost += t[i][j];
-                  // cout << "x[" << i << "][" << j << "] = "<< cplex2.getValue(x[i][j]) << " -> " << t[i][j] << endl;
-                }
-            }
-        }
+      // cout << "x: " << endl;
+      // float routeCost = 0.0;
+      // for(auto i = D; i < V; i++)
+      //   {
+      //     for(auto j = D; j < V; j++)
+      //       {
+      //         if(cplex2.getValue(x[i][j]) > 0.9)
+      //           {
+      //             routeCost += t[i][j];
+      //             // cout << "x[" << i << "][" << j << "] = "<< cplex2.getValue(x[i][j]) << " -> " << t[i][j] << endl;
+      //           }
+      //       }
+      //   }
 
-      cout << "v: ";
-      for(auto i = 0; i < S; i++)
-        cout << cplex2.getValue(v[i]) << " ";
-      cout << endl;
+      // cout << "v: ";
+      // for(auto i = 0; i < S; i++)
+      //   cout << cplex2.getValue(v[i]) << " ";
+      // cout << endl;
 
       // float B2 = 0.0;
       float finalCost = cplex2.getObjValue();
       print_sol(s);
-      // cout << "Depot: ";
-      // for(auto i = 0; i < D; i++)
-      //   cout << y[i] << " ";
-      // cout << endl;
 
       // cout << "Budget = " << B2 << endl;
       // cout << "Route cost  = " << routeCost << endl;
@@ -1013,7 +1493,7 @@ float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Soluti
       //     M = finalCost;
       //     // cout << "updated M = " << M << endl;
       //   }
-
+      env.end();
       return finalCost;
       // cout << "Total time  = " << locationTime + routingTime << endl;
     } catch (IloException& ex) {
@@ -1029,15 +1509,26 @@ float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Soluti
 
 void ILS::runMH(float *result)
 {
-  int iterMax = 20;
-  float timelimit = 5;
+  int iterMax = 30;
+  float timelimit = 10;
   float currentCost = 0;
   Solution s(N, V, WD);
   vector<int> initial(WD, 1);
 
-  float min = solver(initial, Infinity, 20, s, true, false, false);
+  // build initial solution
+  float min = 0;
+  int add = 0;
+  while(!coveringSolver(s, add))
+    add += 0.1;
+
+  currentCost = computeCost(s);
+  if(!s.feasible)
+    {
+      min = solver(initial, Infinity, 20, s, true, false, false, 2, false);
+      currentCost = computeCost(s);
+    }
   float initialCost = min;
-  computeCost(s);
+  //computeCost(s);
   auto start = chrono::steady_clock::now();
   for(auto iter = 0; iter < iterMax; iter++)
     {
@@ -1064,14 +1555,14 @@ void ILS::runMH(float *result)
         }
       if(randValue(generator) < 0.5)
         {
-          currentCost = solver(Sd, currentCost, timelimit, s, true, false, false);
+          currentCost = solver(Sd, currentCost, timelimit, s, true, false, false, 2, false);
           computeCost(s);
         }
       else
         {
-          Solution s2(N, V, WD);
-          copyS(s, s2);
-          currentCost = solver(Sd, currentCost, timelimit, s2, true, true, true);
+          Solution s2 = Solution();
+          s2 = s;
+          currentCost = solver(Sd, currentCost, timelimit, s2, true, true, true, 2, false);
           computeCost(s2);
         }
       if(currentCost < min)
@@ -1086,10 +1577,6 @@ void ILS::runMH(float *result)
   result[0] = initialCost;
   result[1] = min;
   result[2] = totalTime;
-
-  delete s.Sd;
-  delete s.coveredArea;
-  delete s.noInSs;
 }
 
 void ILS::updateElite(Solution &s1, float cost)
@@ -1099,30 +1586,27 @@ void ILS::updateElite(Solution &s1, float cost)
       if(elite.size() > 0)
         {
           map<float, Solution>::iterator rit = --elite.end();
-          //cout << "dasddasdasdadgjhdgjkasdgasdhgasdgasjdgaskdjghasdhasgdjkg " <<  rit->first << " " << cost << endl;
           if(elite.size() < sizeElite || rit->first > cost)
             {
               if(elite.find(cost) == elite.end())
                 {
-                  Solution s(N, V, WD);
-                  copyS(s1, s);
-                  elite.insert(make_pair(cost, s));
-                  // cout << population.size() << endl;
-                  while(elite.size() > sizeElite)
+
+                  elite.insert(make_pair(cost, s1));
+                  //cout << "elite size" << elite.size() << endl;
+                  while(elite.size() >= sizeElite)
                     elite.erase(--elite.end());
+
+                  // cout << "Elite solution:" << endl;
+                  // for(map<float, Solution>::iterator it = elite.begin(); it != elite.end(); ++it)
+                  //   cout << setprecision(decipresi) << it->first <<" " << computeCost(it->second) << endl;
                 }
             }
         }
       else
-        {
-          Solution s(N, V, WD);
-          copyS(s1, s);
-          //computeCost(s1);
-          // print_sol(s);
-          elite.insert(make_pair(cost, s));
-        }
+        elite.insert(make_pair(cost, s1));
     }
 }
+
 
 void ILS::run(float *result)
 {
@@ -1130,189 +1614,134 @@ void ILS::run(float *result)
   auto start = chrono::steady_clock::now();
 
   Solution s(N, V, WD);
-  Solution sBest(N, V, WD);
-  Solution sBestBest(N, V, WD);
-
+  Solution sBest = Solution();
+  Solution sBestBest = Solution();
+  // Solution sBest(N, V, WD);
+  // Solution sBestBest(N, V, WD);
+  float add = 0;
+  int nTimes = 0;
   // build initial solution
-  int nTimes = 5000;
-  auto times = 0;
-  for(; times < nTimes; times++)
+  while(!coveringSolver(s, add))
     {
-      //cout << times << " ";
-      initialSolution(s);
-      computeCost(s);
-      if(!s.feasible)
-        {
-          float alpha = randValue(generator);
-          if(alpha < 0.25)
-              perturbation1(s);
-          else if(alpha < 0.50)
-              perturbation2(s);
-          else if(alpha < 0.75)
-              perturbation3(s);
-          else
-              perturbation4(s);
-          computeCost(s);
-        }
-      for(auto i = 0; i < 10; i++)
-        {
-          for(auto c = D * 2; c < WD * 2; c++)
-            if(s.Ss[c].size())
-              twoOpt(s.Ss[c]);
-          removeNode(s);
-          LS_swap(s);
-          computeCost(s);
-        }
-      if(s.feasible)
-        break;
+      add += 0.1;
+      nTimes++;
     }
+
   float s_cost = computeCost(s);
   vector<int> initial(WD, 1);
-  cout << "Initial solution needed: " << times << " / " << nTimes << endl;
+  cout << "Initial solution needed: " << nTimes << " iterations" << endl;
   cout << "Solution found is " << ((s.feasible == 1) ? "feasible" : "infeasible") << endl;
   if(s.feasible)
     cout << "Initial Cost: " << s_cost << endl;
-  // float UB = s_cost;
-  // if(s.feasible)
-  //   {
-  //     for(unsigned i = 0; i < initial.size(); i++)
-  //       initial[i] = s.Sd[i];
-  //   }
-  // else
-  //   {
-  //     for(unsigned i = 0; i < initial.size(); i++)
-  //       initial[i] = 1;
-  //     UB = Infinity;
-  //   }
-  // while(true)
-  //   {
-  //     Solution s2(N, V, WD);
-  //     copyS(s, s2);
-  //     float min = 0;
-  //     if(s.feasible)
-  //       min = solver(initial, UB, 20, s2, true, true, true);
-  //     else
-  //       min = solver(initial, UB, 20, s2, true, false, false);
-  //     computeCost(s2);
-  //     cout << "min "<< min << endl;
-  //     cout << "cost " << s_cost << " " << s2.feasible << endl;
-  //     print_sol(s2);
-  //     // if(min < Infinity)
-  //       break;
+  else
+    {
+      s_cost = Infinity;
+      s_cost = solver(initial, s_cost, 1000, s, true, false, true, 1, false);
+      s_cost = computeCost(s);
+      cout << "Initial Cost: " << s_cost << endl;
+    }
 
-  //     for(auto i = 0; i < WD; i++)
-  //       initial[i] = rnd(0, 1);
-  //   }
-
-  // vector<float> solutions;
   float s_bestCost = Infinity;
   float s_bestBestCost = Infinity;
   if(s.feasible)
     {
       s_bestBestCost = s_bestCost = s_cost;
-      copyS(s, sBest);
-      copyS(sBest, sBestBest);
-      // solutions.push_back(s_cost);
+      cout << sBest.coveredArea.size();
+      sBest = s;
+      sBestBest = sBest;
     }
 
-  float sameSol = s_bestBestCost;
   float initialCost = s_bestBestCost;
   float increaseTime = 10;
   float alpha = 0;
-  for(auto iter = 1; iter < 5000000; iter++)
+  int iterMax = 500000;
+  for(auto iter = 1; iter < iterMax; iter++)
     {
-      //cout << iter  << endl;
       if(iter % 20000 == 0)
         cout << "iter " << iter << endl;
-
-      float test = randValue(generator);
-      if(elite.size() && test < 0.3)
+      // Perturbations
+      alpha = randValue(generator);
+      if(alpha < 0.20 && elite.size()) // perturbation0
         {
           map<float, Solution>::iterator it = elite.begin();
           int position = rnd(0, elite.size() - 1);
           advance(it, position);
-          copyS(it->second, s);
-          s_cost = computeCost(s);
+          s = it->second;
         }
-
-      test = randValue(generator);
-      if(test < 0.7)
-        {
-          alpha = randValue(generator);
-          if(alpha < 0.25)
-              perturbation1(s);
-          else if(alpha < 0.50)
-            perturbation2(s);
-          else if(alpha < 0.75)
-              perturbation3(s);
-          else
-              perturbation4(s);
-          computeCost(s);
-        }
-
-      // 2-opt for each route
+      else if(alpha < 0.40)
+        perturbation1(s);
+      else if(alpha < 0.60)
+        perturbation2(s);
+      else if(alpha < 0.80)
+        perturbation3(s);
+      else
+        perturbation4(s);
+      s_cost = computeCost(s);
+      // Local searches
       for(auto c = D * 2; c < WD * 2; c++)
         {
+          // 2-opt for each route
           if(s.Ss[c].size())
             twoOpt(s.Ss[c]);
         }
       s_cost = computeCost(s);
-
       removeNode(s);
       s_cost = computeCost(s);
-
       LS_swap(s);
       s_cost = computeCost(s);
-
       LS_swap_outnodes(s);
       s_cost = computeCost(s);
-
+      // keep best solution
       if(s.feasible && (s_bestCost > s_cost))
         {
           s_bestCost = s_cost;
-          copyS(s, sBest);
+          sBest = s;
         }
-      if(iter % 500000 == 0)
+      else if(!s.feasible && iter % 1000 == 0)  // Local Reset
         {
-          cout << sameSol << " " << s_bestBestCost << endl;
+          initialSolution(s);
+          s_cost = computeCost(s);
+        }
+      else if(!s.feasible && elite.size()) // reject solution if is infeasible
+        {
+          map<float, Solution>::iterator it = elite.begin();
+          int position = rnd(0, elite.size() - 1);
+          // cout << "rnd " << position << endl;
+          advance(it, position);
+          s = it->second;
+          s_cost = it->first;
+          s_bestCost = s_cost;
+        }
+      // Solving the MILP model
+      if(iter % 50000 == 0)
+        {
           cout << "BestBestCost " << s_bestBestCost << endl;
           cout << "BestCost " << s_bestCost << endl;
-          if(sameSol != s_bestBestCost)
+          cout << "MIP best" << endl;
+          map<float, Solution>::iterator it;
+          if(elite.size() > 0)
             {
-
-              cout << "MIP best" << endl;
-              map<float, Solution>::iterator it = elite.begin();
-              copyS(it->second, s);
-              // print_sol(s);
+              it = elite.begin();
+              s = it->second;
               for(unsigned i = 0; i < initial.size(); i++)
                 initial[i] = s.Sd[i];
-              alpha = solver(initial, s_bestBestCost, increaseTime, s, true, true, true);
-              increaseTime = 10;
-              sameSol = s_bestBestCost;
+              alpha = solver(initial, s_bestBestCost, increaseTime, s, true, true, true, 2, true);
             }
+          if(alpha < s_bestCost)
+            increaseTime = 10;
           else
-            {
-              cout << "MIP random" << endl;
-              increaseTime += 5;
-              map<float, Solution>::iterator it = elite.begin();
-              int position = rnd(0, elite.size() - 1);
-              // cout << "rnd " << position << endl;
-              advance(it, position);
-              copyS(it->second, s);
-              s_cost = it->first;
-              alpha = solver(initial, s_cost, increaseTime, s, true, true, true);
-            }
+            increaseTime += 2;
 
           s_cost = computeCost(s);
-          cout << "MIP " << alpha << " " << iter <<endl;
         }
       else if(iter % 20000 == 0) // reset general
         {
           cout << "Intensification" << endl;
           // Intensification
-          for(map<float, Solution>::iterator it = elite.begin(); it != elite.end(); ++it)
+          map<float, Solution> current_elite(elite);
+          for(map<float, Solution>::iterator it = current_elite.begin(); it != current_elite.end(); ++it)
             {
-              copyS(it->second, s);
+              s = it->second;
               // 2-opt for each route
               for(auto c = D * 2; c < WD * 2; c++)
                 {
@@ -1328,16 +1757,14 @@ void ILS::run(float *result)
                 {
                   updateElite(s, s.cost);
                   s_bestCost = s_cost;
-                  copyS(s, sBest);
+                  sBest = s;
                 }
             }
           if(s_bestBestCost > s_bestCost)
             {
               s_bestBestCost = s_bestCost;
-              copyS(sBest, sBestBest);
-              cout << iter << " "<< s_bestCost << endl;
-              // print_sol(sBest);
-              // solutions.push_back(s_bestCost);
+              sBestBest = sBest;
+              cout << iter << " " << s_bestCost << endl;
             }
           if(elite.size())
             {
@@ -1345,34 +1772,17 @@ void ILS::run(float *result)
               int position = rnd(0, elite.size() - 1);
               // cout << "rnd " << position << endl;
               advance(it, position);
-              copyS(it->second, s);
+              s = it->second;
               s_cost = it->first;
               s_bestCost = s_cost;
             }
           else
             {
-              s_cost = initialSolution(s);
+              initialSolution(s);
+              s_cost = computeCost(s);
               s_bestCost = Infinity;
             }
-          copyS(s, sBest);
-        }
-      else if(iter % 500 == 0)  // Local Reset
-        {
-          initialSolution(s);
-          s_cost = computeCost(s);
-        }
-      if(s.feasible && (s_bestCost > s_cost))
-        {
-          updateElite(s, s.cost);
-          s_bestCost = s_cost;
-          copyS(s, sBest);
-          if(s_bestBestCost > s_cost)
-            {
-              s_bestBestCost = s_cost;
-              copyS(sBest, sBestBest);
-              //cout << iter << " "<< s_cost << endl;
-              // solutions.push_back(s_cost);
-            }
+          sBest = s;
         }
     }
   cout << "Best solution:" << endl;
@@ -1381,68 +1791,45 @@ void ILS::run(float *result)
   auto totalTime  = chrono::duration <double, std::ratio<1>> (diff).count();
 
   s_bestBestCost = computeCost(sBestBest);
-  cout << "Best cost " << s_bestBestCost << endl;
+  cout << "Best cost " << setprecision(decipresi) << s_bestBestCost << endl;
   print_sol(sBestBest);
-  cout << "Best cost " << s_bestBestCost << endl;
-  // cout << "Best solution found:" << endl;
+  cout << "Best cost " << setprecision(decipresi) << s_bestBestCost << endl;
 
-  // if(solutions.size())
-  //   {
-  //     for(unsigned i = 0; i < solutions.size(); i++)
-  //       cout << i+1 << " "<< solutions[i] << endl;
-  //     cout << "Time = " << totalTime << endl;
-  //   }
-  // else
-  //   {
-  //     cout << "A solution feasible are not found" << endl;
-  //     return;
-  //   }
+  if(elite.size())
+    {
+      cout << "Elite solution:" << endl;
+      for(map<float, Solution>::iterator it = elite.begin(); it != elite.end(); ++it)
+        cout << setprecision(decipresi) << it->first << endl;
 
-  // cout << "Sd: ";
-  // for(auto i = 0; i < D; i++)
-  //   cout << s.Sd[i] << " ";
-  cout << "Elite solution:" << endl;
-  for(map<float, Solution>::iterator it = elite.begin(); it != elite.end(); ++it)
-    cout << it->first << endl;
-
-  map<float, Solution>::iterator it = elite.begin();
-  print_sol(it->second);
-
-  result[0] = initialCost;
-  result[1] = it->first;
-  result[2] = totalTime;
-
-  delete s.Sd;
-  delete sBest.Sd;
-  delete sBestBest.Sd;
-  delete s.coveredArea;
-  delete sBest.coveredArea;
-  delete sBestBest.coveredArea;
-  delete s.noInSs;
-  delete sBest.noInSs;
-  delete sBestBest.noInSs;
+      map<float, Solution>::iterator it = elite.begin();
+      print_sol(it->second);
+      result[0] = initialCost;
+      result[1] = it->first;
+      result[2] = totalTime;
+    }
+  else
+    {
+      cout << "Feasible solution is not found." << endl;
+      result[0] = Infinity;
+      result[1] = Infinity;
+      result[2] = totalTime;
+    }
 }
 
 void ILS::coveringAreaByNode(Solution &s, int i)
 { // depot [0, WD]
   int cover = -1;
-  // cout << "considerado " << i << " cubre a:" << endl;
   for(unsigned k = 0; k < beta[i].size(); k++)
     {
       cover = beta[i][k];
-      // cout << cover << " ";
       s.coveredArea[cover]++;
     }
-  // cout << endl;
 }
 
+// exchange two nodes randomly (one from Ss and another one from noInSs).
 void ILS::perturbation1(Solution &s)
 {
-  // cout << "dhajksdashkajdhaskjdhsakdjhaskjdhasdkjhasjkdhasjkdhaskdhs" << endl;
-
-  //print_sol(s);
   vector<int> candidate;
-
   for(auto i = WD; i < V; i++)
     {
       if(!s.noInSs[i])
@@ -1456,28 +1843,17 @@ void ILS::perturbation1(Solution &s)
         route = rnd(0, s.Ss.size() - 1);
       } while(s.Ss[route].size() == 0);
 
-      //cout << "route " << route << endl;
-      // cout << s.noInSs.size() << endl;
-
       int i = rnd(0, candidate.size() - 1);
-
-      //cout << "noInSs[i] = " << s.noInSs[i] << endl;
-
       int r = rnd(1, s.Ss[route].size() - 2);
-
-      //cout << "r = " << r << endl;
 
       s.Ss[route].insert(s.Ss[route].begin() + r, candidate[i]);
       s.noInSs[candidate[i]] = true;
     }
-  // print_sol(s);
-  // cout << "dhajksdashkajdhaskjdhsakdjhaskjdhasdkjhasjkdhasjkdhaskdhs" << endl;
-
 }
 
+// exchange two nodes randomly from Ss.
 void ILS::perturbation2(Solution &s)
 {
-  // cout << "perturbation2 " << computeCost(s) << endl;
   int route = 0;
   do {
     route = rnd(0, s.Ss.size() - 1);
@@ -1485,25 +1861,17 @@ void ILS::perturbation2(Solution &s)
 
   if(s.Ss[route].size() > 3)
     {
-      //cout << "route " << route << endl;
-      // cout << s.noInSs.size() << endl;
-
       int i = rnd(1, s.Ss[route].size() - 2);
-      //cout << "Ss[i] = " << s.Ss[route][i] << endl;
-
       int j = rnd(1, s.Ss[route].size() - 2);
-      //cout << "Ss[j] = " << s.Ss[route][j] << endl;
-
       int aux = s.Ss[route][i];
+
       s.Ss[route][i] = s.Ss[route][j];
       s.Ss[route][j] = aux;
-      //cout << "done" << endl;
     }
 }
 
 void ILS::perturbation3(Solution &s)
 {
-  // cout << "perturbation3 " << computeCost(s) << endl;
   int count = 0;
   vector<int> r;
 
@@ -1526,28 +1894,20 @@ void ILS::perturbation3(Solution &s)
         numRnd = rnd(0, r.size() - 1);
         route2 = r[numRnd];
       } while(route1 == route2);
-      // cout << "route 1 " << route1 << endl;
-      // cout << "route 2 " << route2 << endl;
-      int i = rnd(1, s.Ss[route1].size() - 2);
-      // cout << "Ss[r1][i] = " << s.Ss[route1][i] << endl;
 
+      int i = rnd(1, s.Ss[route1].size() - 2);
       int j = rnd(1, s.Ss[route2].size() - 2);
-      // cout << "Ss[r2][j] = " << s.Ss[route2][j] << endl;
 
       int aux = s.Ss[route1][i];
       s.Ss[route1][i] = s.Ss[route2][j];
       s.Ss[route2][j] = aux;
-      //cout << "done" << endl;
     }
 }
 
 void ILS::perturbation4(Solution &s)
 {
-  // print_sol(s);
   vector<int> index;
   int d = 0;
-  // cout << "perturbation4 " << computeCost(s) << endl;
-  // print_sol(s);
   int minK[2] = {0, 0};
   for(unsigned i = D * 2; i < s.Ss.size(); i += 2)
     {
@@ -1562,21 +1922,13 @@ void ILS::perturbation4(Solution &s)
   if(!index.size() || minK[0] < 2)
     return;
 
-  // for(unsigned i = 0; i < index.size(); i++)
-  //   cout << "route " << index[i]<< endl;
   int j = rnd(0, index.size() - 1);
   int route = index[j];
-  // cout << "chosen route " << route << endl;
-
   d = route / 2;
-
-  // cout << "lalal" << s.Ss[route].size() << endl;
 
   vector<int> nodes;
   for(unsigned i = 1; i < s.Ss[route].size() - 1; i++)
     nodes.push_back(s.Ss[route][i]);
-
-  // cout << "var" << endl;
 
   s.Ss[route].clear();
   if(s.Ss[route + 1].size())
@@ -1597,8 +1949,6 @@ void ILS::perturbation4(Solution &s)
   for(unsigned i = 0; i < nodes.size(); i++)
     {
       w = nodes[i];
-      //cout << "node " << w  << endl;
-
       float minimum = Infinity;
       int here = -1;
       for(auto c = D * 2; c < WD * 2; c++)
@@ -1630,22 +1980,10 @@ void ILS::perturbation4(Solution &s)
         }
       if(here != -1)
         {
-          //cout << "agrego " << w << endl;
           s.Ss[route].insert(s.Ss[route].begin() + here + 1, w);
           coveringAreaByNode(s, w);
         }
     }
-  // computeCost(s);
-  // print_sol(s);
-
-  // cout << "cA = ";
-
-  // for(auto i = 0; i < N; i++)
-  //   {
-  //     cout << s.coveredArea[i] << " ";
-  //   }
-  // cout << endl;
-
   vector<int> missing;
   vector<bool> mark(V, false);
   for(unsigned i = 0; i < s.Ss.size(); i++)
@@ -1673,19 +2011,9 @@ void ILS::perturbation4(Solution &s)
             }
         }
     }
-  // cout << "missing: " << endl;
-
-  // for(unsigned i = 0; i < missing.size(); i++)
-  //   {
-  //     cout << missing[i] << " ";
-
-  //   }
-  // cout << endl;
 
   if(missing.size())
     {
-      //cout << "quedan (" << missing.size() << ")"<< endl;
-      // check if the solution is feasible
       for(auto ii = 0; ii < N; ii++)
         {
           if(!s.coveredArea[ii])
@@ -1696,7 +2024,6 @@ void ILS::perturbation4(Solution &s)
                   float minimum = Infinity;
                   int here = -1, route = 0;
                   w = missing.back();
-                  //cout << "arreglar " << w << endl;
                   for(auto c = D * 2; c < WD * 2; c++)
                     {
                       d = c / 2;
@@ -1709,7 +2036,6 @@ void ILS::perturbation4(Solution &s)
                                 {
                                   u = s.Ss[c][r];
                                   v = s.Ss[c][r + 1];
-
                                   // cout << u << " " << v << "-> ";
                                   float newCost = t[u][w] + t[w][v] - t[u][v];
                                   // cout << newCost << " " << endl;
@@ -1723,41 +2049,21 @@ void ILS::perturbation4(Solution &s)
 
                                 }
                             }
-                          // else
-                          //   {
-                          //     //cout << "no había y se agrega: " << d << " " << w << " " << d<< endl;
-                          //     s.Ss[c].push_back(d);
-                          //     s.Ss[c].push_back(w);
-                          //     coveringAreaByNode(s, w);
-                          //     s.Ss[c].push_back(d);
-                          //     missing.pop_back();
-                          //     w = missing.back();
-                          //     here = -1;
-                          //     break;
-                          //   }
                         }
                     }
                   if(here != -1)
                     {
-                      //cout << "agrego " << w << endl;
-
                       s.Ss[route].insert(s.Ss[route].begin() + here + 1, w);
                       coveringAreaByNode(s, w);
-                      //s.noInSs.erase(remove(s.noInSs.begin(), s.noInSs.end(), w), s.noInSs.end());
                       s.noInSs[w] = true;
                       missing.pop_back();
                       ii = 0;
                       break;
                     }
                 }
-              // test = false;
             }
         }
     }
-
-  // computeCost(s);
-  // print_sol(s);
-  //exit(0);
 }
 void ILS::computeRoute(Solution &s, vector<float> &c)
 {
@@ -1805,11 +2111,9 @@ bool ILS::LS_swap(Solution &s)
 {
   vector<float> Cost;
   computeRoute(s, Cost);
-  // print_sol(s);
   bool flag = false;
   for(unsigned i = D * 2; i < s.Ss.size(); i++)
     {
-      //cout << "que ondi " << i << " really?! " <<  s.Ss[i].size() << endl;
       if(s.Ss[i].size())
         {
           for(unsigned j = 1; j < s.Ss[i].size() - 1; j++)
@@ -1824,13 +2128,10 @@ bool ILS::LS_swap(Solution &s)
                             continue;
                           else
                             {
-                              //cout << i << " "<< j << " - " << route << " "<< l << endl;
-                              // d(s[i - 1], s[l]) + d(s[l], s[i + 1]) - d(s[i - 1], i) - d(s[i], s[i + 1])
                               int opt = 0;
                               float a = 0, b = 0, c = 0, d = 0, e = 0, f = 0, g = 0, h = 0;
                               if(s.Ss[route][l] != s.Ss[i][j + 1])
                                 {
-                                  //cout << "norep" << endl;
                                   e = t[s.Ss[i][j - 1]][s.Ss[route][l]];
                                   f = t[s.Ss[route][l]][s.Ss[i][j + 1]];
 
@@ -1844,8 +2145,6 @@ bool ILS::LS_swap(Solution &s)
                                   d = t[s.Ss[route][l]][s.Ss[route][l + 1]];
                                   if(!s.feasible)
                                     {
-                                      //cout << "dsadasd "  << e - a +  h - d << endl;
-
                                       if(i == route && (e - a +  h - d < 0))
                                         opt = 1;
                                       if(i != route && (e + f - a - b + Cost[i] < T) && (g + h - c - d + Cost[route] < T))
@@ -1853,8 +2152,6 @@ bool ILS::LS_swap(Solution &s)
                                     }
                                   else
                                     {
-                                      //cout << "lalalala "  << e + f - a - b + g + h - c - d << endl;
-
                                       if(s.Ss[route].size() > 3)
                                         {
                                           if((e + f - a - b + g + h - c - d < 0) && (e + f - a - b + Cost[i] < T) && (g + h - c - d + Cost[route] < T))
@@ -1864,13 +2161,11 @@ bool ILS::LS_swap(Solution &s)
                                         {
                                           if((e + f - a - b + g + h - c - d < 0) && (e + f - a - b + Cost[i] < T) && (g + h - c - d + Cost[route] < T))
                                             opt = 1;
-
                                         }
                                     }
                                 }
                               else
                                 {
-                                  //cout << "rep" << endl;
                                   a = t[s.Ss[i][j - 1]][s.Ss[i][j]];
                                   b = t[s.Ss[route][l]][s.Ss[route][l + 1]];
                                   c = t[s.Ss[i][j - 1]][s.Ss[route][l]];
@@ -1882,16 +2177,12 @@ bool ILS::LS_swap(Solution &s)
 
                               if(opt)
                                 {
-                                  //cout << "cambio " << s.Ss[i][j] << " <-> " << s.Ss[route][l] << endl;
                                   int aux = s.Ss[i][j];
                                   s.Ss[i][j] = s.Ss[route][l];
                                   s.Ss[route][l] = aux;
 
                                   computeCost(s);
-                                  //print_sol(s);
                                   computeRoute(s, Cost);
-                                  //exit(0);
-                                  // return true;
                                 }
                             }
                         }
@@ -1900,9 +2191,6 @@ bool ILS::LS_swap(Solution &s)
             }
         }
     }
-  // print_sol(s);
-  // cout << "end swap" << endl;
-
   return flag;
 }
 
@@ -1913,103 +2201,42 @@ bool ILS::removeNode(Solution &s)
   int node = 0, area = 0;
   int route = 0;
 
-  // for(auto ii = 0; ii < N; ii++)
-  //   cout << s.coveredArea[ii] << " ";
-  // cout << endl;
-  // print_sol(s);
   do {
     route = rnd(0, s.Ss.size() - 1);
   } while(s.Ss[route].size() == 0);
-  // for(auto route = 0; route < s.Ss.size(); route++)
-  //   if(s.Ss[route].size())
-  {
-
-    // cout << "recomputelalala" << endl;
-
-    // for(auto ii = 0; ii < N; ii++)
-    //   cout << s.coveredArea[ii] << " ";
-    // cout << endl;
-    for(unsigned i = 1; i < s.Ss[route].size() - 1; i++)
-      {
-        if(s.Ss[route].size() > 3)
-          {
-            node = s.Ss[route][i];
-            bool flag = true;
-            //cout << node << endl;
-            for(unsigned j = 0; j < beta[node].size(); j++)
-              {
-                area = beta[node][j];
-                // cout << area << " ";
-                if(s.coveredArea[area] < 2)
-                  {
-                    flag = false;
-                    break;
-                  }
-              }
-            // cout << endl;
-            if(flag)
-              {
-                // cout << "se va " << endl;
-                for(unsigned j = 0; j < beta[node].size(); j++) // decreasing covered areas
-                  {
-                    // cout << beta[node][j] << " " << endl;;
-                    s.coveredArea[beta[node][j]] -= 1;
-
-                    // for(auto ii = 0; ii < N; ii++)
-                    //   cout << s.coveredArea[ii] << " ";
-                    // cout << endl;
-                  }
-                // cout << "que " << i << endl;
-                s.Ss[route].erase(s.Ss[route].begin() + i); // remove node
-                s.noInSs[node] = false; // add to list noInSs
-                i--;
-              }
-            // cout << endl;
-
-            // for(auto ii = 0; ii < N; ii++)
-            //   cout << s.coveredArea[ii] << " ";
-            // cout << endl;
-            // computeCost(s);
-            // cout << "recompute" << endl;
-
-            // for(auto ii = 0; ii < N; ii++)
-            //   cout << s.coveredArea[ii] << " ";
-            // cout << endl;
-          }
-      }
-  }
-  //print_sol(s);
-  // if all the nodes are removed so remove this route
-  // if(s.Ss[route].size() == 2)
-  //   {
-  //     s.Ss[route].pop_back();
-  //     s.Ss[route].pop_back();
-  //     if(route % 2 == 0 && s.Ss[route + 1].size() == 0)
-  //       {
-  //         s.Sd[(route / 2)] = 0;
-  //         cout << "lo hice" << endl;
-  //         exit(0);
-  //       }
-  //     else if(route % 2 == 1 && s.Ss[route - 1].size() == 0)
-  //       s.Sd[(route / 2)] = 0;
-  //   }
-
-  // for(unsigned i = 0; i < s.Ss.size(); i++)
-  //   {
-  //     if(i % 2 == 0 && s.Sd[i / 2] == 1 && s.Ss[i].size() == 0 && s.Ss[i + 1].size() == 0)
-  //       {
-  //         cout << "chau" << endl;
-
-  //         s.Sd[(route / 2)] = 0;
-  //         exit(0);
-
-  //       }
-  //   }
-
-
-  // for(auto i = 0; i < N; i++)
-  //   cout << s.coveredArea[i] << " ";
-  // cout << endl;
+  for(unsigned i = 1; i < s.Ss[route].size() - 1; i++)
+    {
+      if(s.Ss[route].size() > 3)
+        {
+          node = s.Ss[route][i];
+          bool flag = true;
+          //cout << node << endl;
+          for(unsigned j = 0; j < beta[node].size(); j++)
+            {
+              area = beta[node][j];
+              // cout << area << " ";
+              if(s.coveredArea[area] < 2)
+                {
+                  flag = false;
+                  break;
+                }
+            }
+          // cout << endl;
+          if(flag)
+            {
+              // cout << "se va " << endl;
+              for(unsigned j = 0; j < beta[node].size(); j++) // decreasing covered areas
+                {
+                  // cout << beta[node][j] << " " << endl;;
+                  s.coveredArea[beta[node][j]] -= 1;
+                }
+              // cout << "que " << i << endl;
+              s.Ss[route].erase(s.Ss[route].begin() + i); // remove node
+              s.noInSs[node] = false; // add to list noInSs
+              i--;
+            }
+        }
+    }
 
   for(auto i = 0; i < N; i++)
     if(!s.coveredArea[i])
@@ -2018,24 +2245,16 @@ bool ILS::removeNode(Solution &s)
         cout << "infeasible?" << endl;
         return false;
       }
-
-
   return true;
 }
 
 bool ILS::twoOpt(vector <int> &s)
 {
-  //cout << "size " << s.size() << endl;
   if(s.size() < 3)
     return false;
   float diff = 0;
   bool improve = false;
   int depot = s[0];
-
-  // for(unsigned i = 0; i < s.size(); i++)
-  //   cout << s[i] << " ";
-  // cout << endl;
-
   for(unsigned i = 0; i < s.size(); i++)
     {
       for(unsigned j = i + 2; j < s.size() - 1; j++)
@@ -2101,14 +2320,14 @@ float ILS::computeCost(Solution &s)
 
   for(unsigned i = D * 2; i < s.Ss.size(); i++)
     {
-      if(s.Ss[i].size() > 0 && s.Sd[i / 2] != 1)
-        {
-          cout << i << " " << s.Ss[i].size() << " " << s.Sd[i / 2]  << endl;
+      // if(s.Ss[i].size() > 0 && s.Sd[i / 2] != 1)
+      //   {
+      //     cout << i << " " << s.Ss[i].size() << " " << s.Sd[i / 2]  << endl;
 
-          cout << "error this route is not watchtower" << endl;
-          print_sol(s);
-          exit(0);
-        }
+      //     cout << "error this route is not watchtower" << endl;
+      //     print_sol(s);
+      //     exit(0);
+      //   }
 
       if(s.Ss[i].size())
         {
@@ -2154,29 +2373,13 @@ float ILS::computeCost(Solution &s)
           s.Rcost += routeCostReal;
         }
     }
-
-  // for(auto i = D; i < V; i++)
-  //   {
-  //     if(check[i] != s.noInSs[i])
-  //       {
-  //         cout << "it is repetead " << i << endl;
-  //         print_sol(s);
-  //         exit(0);
-  //       }
-  //   }
-
-  //cout << "Rcost: "<< s.Rcost << endl;
   // final cost
   s.cost = s.Lcost + s.Rcost;
   // check if the solution is feasible
   for(auto i = 0; i < N; i++)
     if(!s.coveredArea[i])
       s.feasible = 0;
-  //cout << "Total " << s.cost  << " Feasible "<< s.feasible << endl;
 
-  // for(auto i = 0; i < N; i++)
-  //   cout << s.coveredArea[i] << " ";
-  // cout << endl;
   if(routeCost > 10000)
     {
       print_sol(s);
@@ -2230,8 +2433,10 @@ void ILS::print_sol(Solution &s)
           cost += costUAV * temp + C[0][3];
         }
       cout << endl;
+      //cout << i << endl;
     }
-
+  cout << "que ondi" << endl;
+  cout << s.noInSs.size() << endl;
   cout << "noInSs = ";
   for(auto i = WD; i < V; i++)
     if(!s.noInSs[i])

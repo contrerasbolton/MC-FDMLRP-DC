@@ -17,7 +17,6 @@ float costUAV;
 int *mMax;
 int *mMin;
 float *techCost;
-int *WTe;
 float **C;
 int **beta;
 float **t;
@@ -169,6 +168,7 @@ void readInstance(const char *instance)
   //   }
   costUAV = 0.02;
   cout << "reading is ok" << endl;
+  fclose(file);
 }
 
 void solveMILP(int opt)
@@ -888,35 +888,47 @@ void callMatheuristic(int opt)
   fclose(file);
 }
 
-
-void solveTwoStage(int opt)
-{
-
-}
-
 int main(int argc, char *argv[])
 {
   cout << "An heuristic for MC-FDMLRP-DC" << endl;
+
+  // Read arguments
   string folder = "instances/";
   nameInstance = argv[1];
   string name = folder + nameInstance;
   int opt = atoi(argv[2]);
   seed = atoi(argv[3]);
   timeLimit = atoi(argv[4]);
+  cout << name << endl;
   if(argc > 5)
     memoryLimit = atoi(argv[5]);
   else
     memoryLimit = 5000;
 
-  cout << name << endl;
+  // Read instance
   readInstance(name.c_str());
 
+  // Call algorithms
   if(opt == 7)
     callMatheuristic(opt);
   else if(opt == 6)
     callILS(opt);
   else
     solveMILP(opt);
+
+  // Free memory
+  delete [] mMin;
+  delete [] mMax;
+  delete [] techCost;
+  for(auto i = 0; i < WD; i++)
+    delete [] C[i];
+  delete [] C;
+  for(auto i = 0; i < V; i++)
+    delete [] t[i];
+  delete [] t;
+  for(auto i = 0; i < V; i++)
+    delete [] beta[i];
+  delete [] beta;
 
   return 0;
 }

@@ -2,46 +2,12 @@
 #ifndef _ILS_H_
 #define _ILS_H
 
-#include <iostream>
-#include <string>
-#include <vector>
-#include <map>
-#include <chrono>
-#include <random>
-#include <algorithm>
-#include <unordered_set>
-#include <ilcplex/cplex.h>
-#include <ilcplex/ilocplex.h>
-
+#include "solution.hpp"
 #define Infinity 99999999
 using namespace std;
-ILOSTLBEGIN
 
 class ILS {
 private:
-  struct Solution {
-    int *Sd;
-    vector<vector<int> > Ss;
-    bool *noInSs;
-    int *coveredArea;
-    int feasible;
-    float Lcost;
-    float Rcost;
-    float cost;
-    Solution(int N, int V, int WD) {
-      // depot
-      Sd = new int[WD];
-      // areas to cover
-      coveredArea = new int[N];
-      for(auto i = 0; i < N; i++)
-        coveredArea[i] = 0;
-      // initialize routes
-      for(auto d = 0; d < WD * 2; d++)
-        Ss.push_back(vector<int>());
-      // initialize noInSs
-      noInSs = new bool[V];
-    }
-  };
   // Solution solution;
   map<float, Solution> elite;
   int N;
@@ -49,7 +15,6 @@ private:
   int We;
   int W;
   int WD;
-  int K; // eliminar
   int S;
   int B;
   int ND;
@@ -85,8 +50,8 @@ private:
   bool removeNode(Solution &s);
   bool LS_swap(Solution &s);
   bool LS_swap_outnodes(Solution &s);
-  float solver(vector<int> &y, float currentCost, float timeLimit, Solution &s, bool flag, bool initSol, bool original);
-
+  float solver(vector<int> &y, float currentCost, float timeLimit, Solution &s, bool flag, bool initSol, bool original, int tries, bool fixed);
+  float coveringSolver(Solution &s, float add);
 public:
   default_random_engine generator;
   uniform_real_distribution<double> randValue;
