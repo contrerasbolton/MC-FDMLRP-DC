@@ -6,7 +6,6 @@ int N;
 int We;
 int W;
 int D;
-int K; // eliminar
 int WD;
 int S;
 int B;
@@ -51,9 +50,8 @@ void readInstance(const char *instance)
 
   WD = D + We + W;
 
-  K = 1;
-  mMax = new int[K];
-  mMin = new int[K];
+  mMax = new int[1];
+  mMin = new int[1];
   if(!fscanf(file, "%d %f %d %d", &ND, &T, &mMin[0], &mMax[0]))
     printError("reading error in ND, T, Min and Max of watchtowers/ballons ");
 
@@ -691,6 +689,7 @@ void solveMILP(int opt)
       cplex.setParam(IloCplex::Param::TimeLimit, timeLimit);
       cplex.setParam(IloCplex::Param::MIP::Limits::TreeMemory, memoryLimit);
       cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, 1e-07);
+      // cplex.setParam(IloCplex::Param::Benders::Strategy, 3);
       // Solve
       if(!cplex.solve())
         {
@@ -823,7 +822,8 @@ void solveMILP(int opt)
       FILE *file;
       stringstream ss;
       string s;
-      string output = "summary_" + to_string(opt) + ".txt";
+      string path = "output/";
+      string output = path + "summary_" + to_string(opt) + ".txt";
       ss << status;
       ss >> s;
       if((file = fopen(output.c_str(), "a")) == NULL)
@@ -857,7 +857,8 @@ void callILS(int opt)
   FILE *file;
   stringstream ss;
   string s;
-  string output = "summary_" + to_string(opt) + ".txt";
+  string path = "output/";
+  string output = path + "summary_" + to_string(opt) + ".txt";
   if((file = fopen(output.c_str(), "a")) == NULL)
     {
       printf("Error in reading of the %s \n", output.c_str());
@@ -878,7 +879,8 @@ void callMatheuristic(int opt)
   FILE *file;
   stringstream ss;
   string s;
-  string output = "summary_" + to_string(opt) + ".txt";
+  string path = "output/";
+  string output = path + "summary_" + to_string(opt) + ".txt";
   if((file = fopen(output.c_str(), "a")) == NULL)
     {
       printf("Error in reading of the %s \n", output.c_str());

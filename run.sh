@@ -84,7 +84,7 @@ do
 		do
 		run="./drone $INSTANCE$i.$k.dat $algorithm $seed $time $memory"
 		echo "$seed $run > $OUTPUT$INSTANCE$i.$k"_"$TYPE.txt"
-		$run > $OUTPUT$INSTANCE$i.$k"_"$TYPE.txt
+		$run > $OUTPUT$INSTANCE$i.$k"_"$TYPE"_"$seed".txt"
 		done
 	done
 done;

@@ -44,8 +44,6 @@ ILOMIPINFOCALLBACK5(timeLimitCallback,
                     IloNum,   timeLimit,
                     IloNum,   UB)
 {
-
-  //out << "oli " << UB << " " << getBestObjValue() << " " << getIncumbentObjValue() << endl;
   if(getBestObjValue() > UB)
     {
       getEnv().out() << endl
@@ -209,6 +207,15 @@ bool ILS::initialSolution(Solution &s)
                       // cout << "var2 "<< c << " " << s.Ss.size() << endl;
                       s.Ss[c] = aux;
                       // cout << "var3" << endl;
+                      if(nodes.size() == 1) // there no nodes
+                        {
+                          // cout << "fin" << endl;
+                          //routeCost += t[u][d];
+                          // aux.push_back(d);
+                          // s.Ss[c] = aux;
+                          nodes.pop_back();
+                          break;
+                        }
                     }
                   else //cannot returning from last u
                     {
@@ -757,7 +764,7 @@ float ILS::coveringSolver(Solution &s, float add)
       cplex2.setParam(IloCplex::Param::TimeLimit, timeLimit);
       if(!cplex2.solve())
         {
-          cout << "can't solve'" << endl;
+          cout << "can't solve, we tried with " << add << endl;
           env.end();
           return false;
         }
@@ -782,8 +789,6 @@ float ILS::coveringSolver(Solution &s, float add)
       // for(auto c = 0; c < WD * 2; c++)
       //   s.Ss[c].clear();
       int route = 0;
-
-      cout << "oli en solvercover" << endl;
       for(auto i = D; i < WD; i++)
         {
           for(auto j = WD; j < V2; j++)
@@ -1360,6 +1365,7 @@ float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Soluti
       cplex2.setParam(IloCplex::Param::TimeLimit, timeLimit);
       cplex2.setParam(IloCplex::Param::Emphasis::MIP, 1);
       cplex2.setParam(IloCplex::Param::MIP::Limits::Solutions, tries);
+      // cplex2.setParam(IloCplex::Param::Benders::Strategy, 3);
       // cplex2.use(timeLimitCallback(env, cplex2, IloFalse, cplex2.getCplexTime(), timeLimit, currentUB));
       // cplex2.setOut(env.getNullStream());
       // cplex2.setParam(IloCplex::Param::MIP::Display, 0);
@@ -1505,315 +1511,6 @@ float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Soluti
   }
   env.end();
   return -1;
-}
-
-void ILS::runMH(float *result)
-{
-  int iterMax = 30;
-  float timelimit = 10;
-  float currentCost = 0;
-  Solution s(N, V, WD);
-  vector<int> initial(WD, 1);
-
-  // build initial solution
-  float min = 0;
-  int add = 0;
-  while(!coveringSolver(s, add))
-    add += 0.1;
-
-  currentCost = computeCost(s);
-  if(!s.feasible)
-    {
-      min = solver(initial, Infinity, 20, s, true, false, false, 2, false);
-      currentCost = computeCost(s);
-    }
-  float initialCost = min;
-  //computeCost(s);
-  auto start = chrono::steady_clock::now();
-  for(auto iter = 0; iter < iterMax; iter++)
-    {
-      vector<int> Sd(WD);
-
-      for(auto i = 0; i < WD; i++)
-        Sd[i] = rnd(0, 1);
-
-      // at least one wt actived
-      bool atLeast = true;
-      int d = 0;
-      for(auto i = D; i < WD; i++)
-        {
-          if(Sd[i])
-            {
-              atLeast = false;
-              break;
-            }
-        }
-      if(atLeast)
-        {
-          d = rnd(D, WD - 1);
-          Sd[d] = 1;
-        }
-      if(randValue(generator) < 0.5)
-        {
-          currentCost = solver(Sd, currentCost, timelimit, s, true, false, false, 2, false);
-          computeCost(s);
-        }
-      else
-        {
-          Solution s2 = Solution();
-          s2 = s;
-          currentCost = solver(Sd, currentCost, timelimit, s2, true, true, true, 2, false);
-          computeCost(s2);
-        }
-      if(currentCost < min)
-        min = currentCost;
-    }
-
-  auto end = chrono::steady_clock::now();
-  auto diff = end - start;
-  auto totalTime  = chrono::duration <double, std::ratio<1>> (diff).count();
-  cout << "Cost = " << min << endl;
-  cout << "Time = " << totalTime << endl;
-  result[0] = initialCost;
-  result[1] = min;
-  result[2] = totalTime;
-}
-
-void ILS::updateElite(Solution &s1, float cost)
-{
-  if(s1.feasible)
-    {
-      if(elite.size() > 0)
-        {
-          map<float, Solution>::iterator rit = --elite.end();
-          if(elite.size() < sizeElite || rit->first > cost)
-            {
-              if(elite.find(cost) == elite.end())
-                {
-
-                  elite.insert(make_pair(cost, s1));
-                  //cout << "elite size" << elite.size() << endl;
-                  while(elite.size() >= sizeElite)
-                    elite.erase(--elite.end());
-
-                  // cout << "Elite solution:" << endl;
-                  // for(map<float, Solution>::iterator it = elite.begin(); it != elite.end(); ++it)
-                  //   cout << setprecision(decipresi) << it->first <<" " << computeCost(it->second) << endl;
-                }
-            }
-        }
-      else
-        elite.insert(make_pair(cost, s1));
-    }
-}
-
-
-void ILS::run(float *result)
-{
-  cout << "ILS" << endl;
-  auto start = chrono::steady_clock::now();
-
-  Solution s(N, V, WD);
-  Solution sBest = Solution();
-  Solution sBestBest = Solution();
-  // Solution sBest(N, V, WD);
-  // Solution sBestBest(N, V, WD);
-  float add = 0;
-  int nTimes = 0;
-  // build initial solution
-  while(!coveringSolver(s, add))
-    {
-      add += 0.1;
-      nTimes++;
-    }
-
-  float s_cost = computeCost(s);
-  vector<int> initial(WD, 1);
-  cout << "Initial solution needed: " << nTimes << " iterations" << endl;
-  cout << "Solution found is " << ((s.feasible == 1) ? "feasible" : "infeasible") << endl;
-  if(s.feasible)
-    cout << "Initial Cost: " << s_cost << endl;
-  else
-    {
-      s_cost = Infinity;
-      s_cost = solver(initial, s_cost, 1000, s, true, false, true, 1, false);
-      s_cost = computeCost(s);
-      cout << "Initial Cost: " << s_cost << endl;
-    }
-
-  float s_bestCost = Infinity;
-  float s_bestBestCost = Infinity;
-  if(s.feasible)
-    {
-      s_bestBestCost = s_bestCost = s_cost;
-      cout << sBest.coveredArea.size();
-      sBest = s;
-      sBestBest = sBest;
-    }
-
-  float initialCost = s_bestBestCost;
-  float increaseTime = 10;
-  float alpha = 0;
-  int iterMax = 500000;
-  for(auto iter = 1; iter < iterMax; iter++)
-    {
-      if(iter % 20000 == 0)
-        cout << "iter " << iter << endl;
-      // Perturbations
-      alpha = randValue(generator);
-      if(alpha < 0.20 && elite.size()) // perturbation0
-        {
-          map<float, Solution>::iterator it = elite.begin();
-          int position = rnd(0, elite.size() - 1);
-          advance(it, position);
-          s = it->second;
-        }
-      else if(alpha < 0.40)
-        perturbation1(s);
-      else if(alpha < 0.60)
-        perturbation2(s);
-      else if(alpha < 0.80)
-        perturbation3(s);
-      else
-        perturbation4(s);
-      s_cost = computeCost(s);
-      // Local searches
-      for(auto c = D * 2; c < WD * 2; c++)
-        {
-          // 2-opt for each route
-          if(s.Ss[c].size())
-            twoOpt(s.Ss[c]);
-        }
-      s_cost = computeCost(s);
-      removeNode(s);
-      s_cost = computeCost(s);
-      LS_swap(s);
-      s_cost = computeCost(s);
-      LS_swap_outnodes(s);
-      s_cost = computeCost(s);
-      // keep best solution
-      if(s.feasible && (s_bestCost > s_cost))
-        {
-          s_bestCost = s_cost;
-          sBest = s;
-        }
-      else if(!s.feasible && iter % 1000 == 0)  // Local Reset
-        {
-          initialSolution(s);
-          s_cost = computeCost(s);
-        }
-      else if(!s.feasible && elite.size()) // reject solution if is infeasible
-        {
-          map<float, Solution>::iterator it = elite.begin();
-          int position = rnd(0, elite.size() - 1);
-          // cout << "rnd " << position << endl;
-          advance(it, position);
-          s = it->second;
-          s_cost = it->first;
-          s_bestCost = s_cost;
-        }
-      // Solving the MILP model
-      if(iter % 50000 == 0)
-        {
-          cout << "BestBestCost " << s_bestBestCost << endl;
-          cout << "BestCost " << s_bestCost << endl;
-          cout << "MIP best" << endl;
-          map<float, Solution>::iterator it;
-          if(elite.size() > 0)
-            {
-              it = elite.begin();
-              s = it->second;
-              for(unsigned i = 0; i < initial.size(); i++)
-                initial[i] = s.Sd[i];
-              alpha = solver(initial, s_bestBestCost, increaseTime, s, true, true, true, 2, true);
-            }
-          if(alpha < s_bestCost)
-            increaseTime = 10;
-          else
-            increaseTime += 2;
-
-          s_cost = computeCost(s);
-        }
-      else if(iter % 20000 == 0) // reset general
-        {
-          cout << "Intensification" << endl;
-          // Intensification
-          map<float, Solution> current_elite(elite);
-          for(map<float, Solution>::iterator it = current_elite.begin(); it != current_elite.end(); ++it)
-            {
-              s = it->second;
-              // 2-opt for each route
-              for(auto c = D * 2; c < WD * 2; c++)
-                {
-                  if(s.Ss[c].size())
-                    twoOpt(s.Ss[c]);
-                }
-              s_cost = computeCost(s);
-              removeNode(s);
-              s_cost = computeCost(s);
-              LS_swap(s);
-
-              if(s.feasible && (s_bestCost > s_cost))
-                {
-                  updateElite(s, s.cost);
-                  s_bestCost = s_cost;
-                  sBest = s;
-                }
-            }
-          if(s_bestBestCost > s_bestCost)
-            {
-              s_bestBestCost = s_bestCost;
-              sBestBest = sBest;
-              cout << iter << " " << s_bestCost << endl;
-            }
-          if(elite.size())
-            {
-              map<float, Solution>::iterator it = elite.begin();
-              int position = rnd(0, elite.size() - 1);
-              // cout << "rnd " << position << endl;
-              advance(it, position);
-              s = it->second;
-              s_cost = it->first;
-              s_bestCost = s_cost;
-            }
-          else
-            {
-              initialSolution(s);
-              s_cost = computeCost(s);
-              s_bestCost = Infinity;
-            }
-          sBest = s;
-        }
-    }
-  cout << "Best solution:" << endl;
-  auto end = chrono::steady_clock::now();
-  auto diff = end - start;
-  auto totalTime  = chrono::duration <double, std::ratio<1>> (diff).count();
-
-  s_bestBestCost = computeCost(sBestBest);
-  cout << "Best cost " << setprecision(decipresi) << s_bestBestCost << endl;
-  print_sol(sBestBest);
-  cout << "Best cost " << setprecision(decipresi) << s_bestBestCost << endl;
-
-  if(elite.size())
-    {
-      cout << "Elite solution:" << endl;
-      for(map<float, Solution>::iterator it = elite.begin(); it != elite.end(); ++it)
-        cout << setprecision(decipresi) << it->first << endl;
-
-      map<float, Solution>::iterator it = elite.begin();
-      print_sol(it->second);
-      result[0] = initialCost;
-      result[1] = it->first;
-      result[2] = totalTime;
-    }
-  else
-    {
-      cout << "Feasible solution is not found." << endl;
-      result[0] = Infinity;
-      result[1] = Infinity;
-      result[2] = totalTime;
-    }
 }
 
 void ILS::coveringAreaByNode(Solution &s, int i)
@@ -2435,8 +2132,6 @@ void ILS::print_sol(Solution &s)
       cout << endl;
       //cout << i << endl;
     }
-  cout << "que ondi" << endl;
-  cout << s.noInSs.size() << endl;
   cout << "noInSs = ";
   for(auto i = WD; i < V; i++)
     if(!s.noInSs[i])
@@ -2449,4 +2144,318 @@ void ILS::print_sol(Solution &s)
   cout << endl;
   cout << "Feasible = " << s.feasible << endl;
   cout << "cost = " << cost << endl;
+}
+
+void ILS::updateElite(Solution &s1, float cost)
+{
+  if(s1.feasible)
+    {
+      if(elite.size() > 0)
+        {
+          map<float, Solution>::iterator rit = --elite.end();
+          if(elite.size() < sizeElite || rit->first > cost)
+            {
+              if(elite.find(cost) == elite.end())
+                {
+                  elite.insert(make_pair(cost, s1));
+                  //cout << "elite size" << elite.size() << endl;
+                  while(elite.size() >= sizeElite)
+                    elite.erase(--elite.end());
+                }
+            }
+        }
+      else
+        elite.insert(make_pair(cost, s1));
+    }
+}
+
+void ILS::runMH(float *result)
+{
+  int iterMax = 10;
+  float timelimit = 10;
+
+  Solution s(N, V, WD);
+  Solution sBest = Solution();
+  vector<int> initial(WD, 1);
+  // build initial solution
+  float min = 0;
+  float add = 0;
+  int nTimes = 0;
+  while(!coveringSolver(s, add))
+    {
+      add += 0.1;
+      nTimes++;
+    }
+
+  float currentCost = computeCost(s);
+  cout << "Initial solution needed: " << nTimes << " iterations" << endl;
+  cout << "Solution found is " << ((s.feasible == 1) ? "feasible" : "infeasible") << endl;
+  if(s.feasible)
+    cout << "Initial Cost: " << currentCost << endl;
+  else
+    {
+      currentCost = Infinity;
+      currentCost = solver(initial, currentCost, 1000, s, true, false, true, 1, false);
+      currentCost = computeCost(s);
+      cout << "Initial Cost: " << currentCost << endl;
+    }
+
+  float initialCost = min = currentCost;
+  //computeCost(s);
+  auto start = chrono::steady_clock::now();
+  for(auto iter = 0; iter < iterMax; iter++)
+    {
+      vector<int> Sd(WD);
+      for(auto i = 0; i < WD; i++)
+        Sd[i] = s.Sd[i];
+
+      // // at least one wt actived
+      // bool atLeast = true;
+      // int d = 0;
+      // for(auto i = D; i < WD; i++)
+      //   {
+      //     if(Sd[i])
+      //       {
+      //         atLeast = false;
+      //         break;
+      //       }
+      //   }
+      // if(atLeast)
+      //   {
+      //     d = rnd(D, WD - 1);
+      //     Sd[d] = 1;
+      //   }
+      // if(randValue(generator) < 0.5)
+      //   {
+      //currentCost = solver(s.Sd, currentCost, timelimit, s, true, false, false, 2, true);
+      currentCost = solver(s.Sd, currentCost, timelimit, s, true, true, true, 2, true);
+      // currentCost = computeCost(s);
+        // }
+      // else
+      //   {
+      //     Solution s2 = Solution();
+      //     s2 = s;
+      //     currentCost = solver(Sd, currentCost, timelimit, s2, true, true, true, 2, true);
+      //     computeCost(s2);
+      //   }
+      if(currentCost < min)
+        min = currentCost;
+    }
+
+  auto end = chrono::steady_clock::now();
+  auto diff = end - start;
+  auto totalTime  = chrono::duration <double, std::ratio<1>> (diff).count();
+  cout << "Cost = " << min << endl;
+  cout << "Time = " << totalTime << endl;
+  result[0] = initialCost;
+  result[1] = min;
+  result[2] = totalTime;
+}
+
+void ILS::run(float *result)
+{
+  cout << "ILS" << endl;
+  auto start = chrono::steady_clock::now();
+
+  Solution s(N, V, WD);
+  Solution sBest = Solution();
+  Solution sBestBest = Solution();
+  // Solution sBest(N, V, WD);
+  // Solution sBestBest(N, V, WD);
+  float add = 0;
+  int nTimes = 0;
+  // build initial solution
+  while(!coveringSolver(s, add))
+    {
+      add += 0.1;
+      nTimes++;
+    }
+
+  float s_cost = computeCost(s);
+  vector<int> initial(WD, 1);
+  cout << "Initial solution needed: " << nTimes << " iterations" << endl;
+  cout << "Solution found is " << ((s.feasible == 1) ? "feasible" : "infeasible") << endl;
+  if(s.feasible)
+    cout << "Initial Cost: " << s_cost << endl;
+  else
+    {
+      s_cost = Infinity;
+      s_cost = solver(initial, s_cost, 1000, s, true, false, true, 1, false);
+      s_cost = computeCost(s);
+      cout << "Initial Cost: " << s_cost << endl;
+    }
+
+  float s_bestCost = Infinity;
+  float s_bestBestCost = Infinity;
+  if(s.feasible)
+    {
+      s_bestBestCost = s_bestCost = s_cost;
+      cout << sBest.coveredArea.size();
+      sBest = s;
+      sBestBest = sBest;
+    }
+
+  float initialCost = s_bestBestCost;
+  float increaseTime = 10;
+  float alpha = 0;
+  int iterMax = 500000;
+  for(auto iter = 1; iter < iterMax; iter++)
+    {
+      if(iter % 20000 == 0)
+        cout << "iter " << iter << endl;
+      // Perturbations
+      alpha = randValue(generator);
+      if(alpha < 0.20 && elite.size()) // perturbation0
+        {
+          map<float, Solution>::iterator it = elite.begin();
+          int position = rnd(0, elite.size() - 1);
+          advance(it, position);
+          s = it->second;
+        }
+      else if(alpha < 0.40)
+        perturbation1(s);
+      else if(alpha < 0.60)
+        perturbation2(s);
+      else if(alpha < 0.80)
+        perturbation3(s);
+      else
+        perturbation4(s);
+      s_cost = computeCost(s);
+      // Local searches
+      for(auto c = D * 2; c < WD * 2; c++)
+        {
+          // 2-opt for each route
+          if(s.Ss[c].size())
+            twoOpt(s.Ss[c]);
+        }
+      s_cost = computeCost(s);
+      removeNode(s);
+      s_cost = computeCost(s);
+      LS_swap(s);
+      s_cost = computeCost(s);
+      LS_swap_outnodes(s);
+      s_cost = computeCost(s);
+      // keep best solution
+      if(s.feasible && (s_bestCost > s_cost))
+        {
+          s_bestCost = s_cost;
+          sBest = s;
+        }
+      else if(!s.feasible && iter % 1000 == 0)  // Local Reset
+        {
+          initialSolution(s);
+          s_cost = computeCost(s);
+        }
+      else if(!s.feasible && elite.size()) // reject solution if is infeasible
+        {
+          map<float, Solution>::iterator it = elite.begin();
+          int position = rnd(0, elite.size() - 1);
+          // cout << "rnd " << position << endl;
+          advance(it, position);
+          s = it->second;
+          s_cost = it->first;
+          s_bestCost = s_cost; //mirar esto!!!!!
+        }
+      // Solving the MILP model
+      if(iter % 50000 == 0)
+        {
+          cout << "BestBestCost " << s_bestBestCost << endl;
+          cout << "BestCost " << s_bestCost << endl;
+          cout << "MIP best" << endl;
+          map<float, Solution>::iterator it;
+          if(elite.size() > 0)
+            {
+              it = elite.begin();
+              s = it->second;
+              for(unsigned i = 0; i < initial.size(); i++)
+                initial[i] = s.Sd[i];
+              alpha = solver(initial, s_bestBestCost, increaseTime, s, true, true, true, 2, true);
+            }
+          if(alpha < s_bestCost)
+            increaseTime = 10;
+          else
+            increaseTime += 2;
+
+          s_cost = computeCost(s);
+        }
+      else if(iter % 20000 == 0) // reset general
+        {
+          cout << "Intensification" << endl;
+          // Intensification
+          map<float, Solution> current_elite(elite);
+          for(map<float, Solution>::iterator it = current_elite.begin(); it != current_elite.end(); ++it)
+            {
+              s = it->second;
+              // 2-opt for each route
+              for(auto c = D * 2; c < WD * 2; c++)
+                {
+                  if(s.Ss[c].size())
+                    twoOpt(s.Ss[c]);
+                }
+              s_cost = computeCost(s);
+              removeNode(s);
+              s_cost = computeCost(s);
+              LS_swap(s);
+
+              if(s.feasible && (s_bestCost > s_cost))
+                {
+                  updateElite(s, s.cost);
+                  s_bestCost = s_cost;
+                  sBest = s;
+                }
+            }
+          if(s_bestBestCost > s_bestCost)
+            {
+              s_bestBestCost = s_bestCost;
+              sBestBest = sBest;
+              cout << iter << " " << s_bestCost << endl;
+            }
+          if(elite.size())
+            {
+              map<float, Solution>::iterator it = elite.begin();
+              int position = rnd(0, elite.size() - 1);
+              // cout << "rnd " << position << endl;
+              advance(it, position);
+              s = it->second;
+              s_cost = it->first;
+              s_bestCost = s_cost;
+            }
+          else
+            {
+              initialSolution(s);
+              s_cost = computeCost(s);
+              s_bestCost = Infinity;
+            }
+          sBest = s;
+        }
+    }
+  cout << "Best solution:" << endl;
+  auto end = chrono::steady_clock::now();
+  auto diff = end - start;
+  auto totalTime  = chrono::duration <double, std::ratio<1>> (diff).count();
+
+  s_bestBestCost = computeCost(sBestBest);
+  cout << "Best cost " << setprecision(decipresi) << s_bestBestCost << endl;
+  print_sol(sBestBest);
+  cout << "Best cost " << setprecision(decipresi) << s_bestBestCost << endl;
+
+  if(elite.size())
+    {
+      cout << "Elite solution:" << endl;
+      for(map<float, Solution>::iterator it = elite.begin(); it != elite.end(); ++it)
+        cout << setprecision(decipresi) << it->first << endl;
+
+      map<float, Solution>::iterator it = elite.begin();
+      print_sol(it->second);
+      result[0] = initialCost;
+      result[1] = it->first;
+      result[2] = totalTime;
+    }
+  else
+    {
+      cout << "Feasible solution is not found." << endl;
+      result[0] = Infinity;
+      result[1] = Infinity;
+      result[2] = totalTime;
+    }
 }
