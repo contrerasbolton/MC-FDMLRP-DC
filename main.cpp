@@ -850,7 +850,21 @@ void callILS(int opt)
   cout << "ILS is running" << endl;
   // initial cost, cost obtained, computing time
   float result[3] = {0.0, 0.0, 0.0};
-  ILS *ils = new ILS(seed, N, D, We, W, S, B, beta, ND, T, V, distSum, b, bi, t, mMax, mMin, C, costUAV);
+  float *parameters = new float[11];
+  parameters[0] = 30;
+  parameters[1] = 500000;
+  parameters[2] = 50000;
+  parameters[3] = 20000;
+  parameters[4] = 1000;
+  parameters[5] = 0.2;
+  parameters[6] = 0.2;
+  parameters[7] = 0.2;
+  parameters[8] = 0.2;
+  parameters[9] = 0.2;
+  parameters[10] = 0.6;
+  parameters[11] = 10;
+
+  ILS *ils = new ILS(seed, N, D, We, W, S, B, beta, ND, T, V, distSum, b, bi, t, mMax, mMin, C, costUAV, parameters);
   ils->run(&result[0]);
   delete ils;
   cout << result[0] << "\t" << result[1] << "\t" << result[2] << endl;
@@ -872,7 +886,21 @@ void callMatheuristic(int opt)
 {
   cout << "Matheuristic is running" << endl;
   float result[3] = {0.0, 0.0, 0.0};
-  ILS *ils = new ILS(seed, N, D, We, W, S, B, beta, ND, T, V, distSum, b, bi, t, mMax, mMin, C, costUAV);
+  float *parameters = new float[11];
+  parameters[0] = 30;
+  parameters[1] = 500000;
+  parameters[2] = 50000;
+  parameters[3] = 20000;
+  parameters[4] = 1000;
+  parameters[5] = 0.2;
+  parameters[6] = 0.2;
+  parameters[7] = 0.2;
+  parameters[8] = 0.2;
+  parameters[9] = 0.2;
+  parameters[10] = 0.6;
+  parameters[11] = 10;
+
+  ILS *ils = new ILS(seed, N, D, We, W, S, B, beta, ND, T, V, distSum, b, bi, t, mMax, mMin, C, costUAV, parameters);
   ils->runMH(&result[0]);
   delete ils;
   cout << result[0] << "\t" << result[1] << "\t" << result[2] << endl;

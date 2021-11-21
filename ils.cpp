@@ -1,10 +1,8 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2; -*- */
 #include "ils.hpp"
 
-unsigned sizeElite = 30;
-unsigned decipresi = 10;
 ILS::ILS(int seed, int N, int D, int We, int W, int S, int B, int **beta, int ND, float T, int V, float M,
-         vector<vector<int> > &b, vector<vector<int> > &bi, float **t, int *mMax, int *mMin, float **C, float costUAV)
+         vector<vector<int> > &b, vector<vector<int> > &bi, float **t, int *mMax, int *mMin, float **C, float costUAV, float *parameters)
 {
   this->seed = seed;
   this->N = N;
@@ -30,6 +28,35 @@ ILS::ILS(int seed, int N, int D, int We, int W, int S, int B, int **beta, int ND
   // Initialize
   generator.seed(seed);
   randValue = uniform_real_distribution<double>(0.0, 1.0);
+  decipresi = 10;
+
+  // Parameters
+  E  = parameters[0]; // size of elite solutions
+  Kt = parameters[1]; // iterations number
+  Km = parameters[2]; // number that every Km iterations calls to the MILP solver
+  Kg = parameters[3]; // number that every Kg iterations calls to the global reset
+  Kl = parameters[4]; // number that every Kl iterations calls to the local reset
+  p1 = parameters[5]; // probability for perturbation 1
+  p2 = parameters[6]; // probability for perturbation 2
+  p3 = parameters[7]; // probability for perturbation 3
+  p4 = parameters[8]; // probability for perturbation 4
+  p5 = parameters[9]; // probability for perturbation 5
+  wp  = parameters[10]; // probability to fix variables to zero in the MILP solver
+  Tc = parameters[11]; // the time limit to solve by Cplex
+
+  cout << "Parameters: " << endl;
+  cout << "E  = " << E << endl;
+  cout << "Kt = " << Kt << endl;
+  cout << "Km = " << Km << endl;
+  cout << "Kg = " << Kg << endl;
+  cout << "Kl = " << Kl << endl;
+  cout << "p1 = " << p1 << endl;
+  cout << "p2 = " << p2 << endl;
+  cout << "p3 = " << p3 << endl;
+  cout << "p4 = " << p4 << endl;
+  cout << "p5 = " << p5 << endl;
+  cout << "w  = " << wp << endl;
+  cout << "Tc = " << Tc << endl;
 }
 
 ILS::~ILS()
@@ -467,9 +494,10 @@ float ILS::coveringSolver(Solution &s, float add)
           if(cplex.getValue(y[i]) > 0.9)
             {
               nickname.push_back(i);
-              cout << i << endl;
+              cout << i << " ";
             }
         }
+      cout << endl;
 
       V2 = V2 + WD;
       // decision variables x
@@ -1348,7 +1376,7 @@ float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Soluti
             }
           for(auto i = D; i < V; i++)
             {
-              if(values[i] > 0 && values[i] < 0.6)
+              if(values[i] > 0 && values[i] < wp)
                 {
                   nfixed++;
                   for(auto j = D; j < V; j++)
@@ -1524,7 +1552,7 @@ void ILS::coveringAreaByNode(Solution &s, int i)
 }
 
 // exchange two nodes randomly (one from Ss and another one from noInSs).
-void ILS::perturbation1(Solution &s)
+void ILS::perturbation2(Solution &s)
 {
   vector<int> candidate;
   for(auto i = WD; i < V; i++)
@@ -1549,7 +1577,7 @@ void ILS::perturbation1(Solution &s)
 }
 
 // exchange two nodes randomly from Ss.
-void ILS::perturbation2(Solution &s)
+void ILS::perturbation3(Solution &s)
 {
   int route = 0;
   do {
@@ -1567,7 +1595,7 @@ void ILS::perturbation2(Solution &s)
     }
 }
 
-void ILS::perturbation3(Solution &s)
+void ILS::perturbation4(Solution &s)
 {
   int count = 0;
   vector<int> r;
@@ -1601,7 +1629,7 @@ void ILS::perturbation3(Solution &s)
     }
 }
 
-void ILS::perturbation4(Solution &s)
+void ILS::perturbation5(Solution &s)
 {
   vector<int> index;
   int d = 0;
@@ -2153,13 +2181,13 @@ void ILS::updateElite(Solution &s1, float cost)
       if(elite.size() > 0)
         {
           map<float, Solution>::iterator rit = --elite.end();
-          if(elite.size() < sizeElite || rit->first > cost)
+          if(elite.size() < E || rit->first > cost)
             {
               if(elite.find(cost) == elite.end())
                 {
                   elite.insert(make_pair(cost, s1));
                   //cout << "elite size" << elite.size() << endl;
-                  while(elite.size() >= sizeElite)
+                  while(elite.size() >= E)
                     elite.erase(--elite.end());
                 }
             }
@@ -2296,30 +2324,29 @@ void ILS::run(float *result)
     }
 
   float initialCost = s_bestBestCost;
-  float increaseTime = 10;
+  float increaseTime = Tc;
   float alpha = 0;
-  int iterMax = 500000;
-  for(auto iter = 1; iter < iterMax; iter++)
+  for(unsigned iter = 1; iter < Kt; iter++)
     {
       if(iter % 20000 == 0)
         cout << "iter " << iter << endl;
       // Perturbations
       alpha = randValue(generator);
-      if(alpha < 0.20 && elite.size()) // perturbation0
+      if(alpha < p1 && elite.size()) // perturbation1
         {
           map<float, Solution>::iterator it = elite.begin();
           int position = rnd(0, elite.size() - 1);
           advance(it, position);
           s = it->second;
         }
-      else if(alpha < 0.40)
-        perturbation1(s);
-      else if(alpha < 0.60)
+      else if(alpha < p2)
         perturbation2(s);
-      else if(alpha < 0.80)
+      else if(alpha < p3)
         perturbation3(s);
-      else
+      else if(alpha < p4)
         perturbation4(s);
+      else // p5
+        perturbation5(s);
       s_cost = computeCost(s);
       // Local searches
       for(auto c = D * 2; c < WD * 2; c++)
@@ -2341,7 +2368,7 @@ void ILS::run(float *result)
           s_bestCost = s_cost;
           sBest = s;
         }
-      else if(!s.feasible && iter % 1000 == 0)  // Local Reset
+      else if(!s.feasible && iter % Kl == 0)  // Local Reset
         {
           initialSolution(s);
           s_cost = computeCost(s);
@@ -2357,7 +2384,7 @@ void ILS::run(float *result)
           s_bestCost = s_cost; //mirar esto!!!!!
         }
       // Solving the MILP model
-      if(iter % 50000 == 0)
+      if(iter % Km == 0)
         {
           cout << "BestBestCost " << s_bestBestCost << endl;
           cout << "BestCost " << s_bestCost << endl;
@@ -2372,13 +2399,13 @@ void ILS::run(float *result)
               alpha = solver(initial, s_bestBestCost, increaseTime, s, true, true, true, 2, true);
             }
           if(alpha < s_bestCost)
-            increaseTime = 10;
+            increaseTime = Tc;
           else
             increaseTime += 2;
 
           s_cost = computeCost(s);
         }
-      else if(iter % 20000 == 0) // reset general
+      else if(iter % Kg == 0) // reset general
         {
           cout << "Intensification" << endl;
           // Intensification
