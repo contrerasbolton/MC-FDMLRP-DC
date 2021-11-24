@@ -689,141 +689,153 @@ void solveMILP(int opt)
       cplex.setParam(IloCplex::Param::TimeLimit, timeLimit);
       cplex.setParam(IloCplex::Param::MIP::Limits::TreeMemory, memoryLimit);
       cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, 1e-07);
-      // cplex.setParam(IloCplex::Param::Benders::Strategy, 3);
+      //cplex.setParam(IloCplex::Param::Benders::Strategy, 3);
+
+      float LB = 0, totalTime = 0, DroneCost = 0, totalCost = 0, gap = 0;
+      int totalCover = 0;
+      int watchtowers = 0, ewatchtowers = 0, ballons = 0, nDrones = 0;
+      float wtCost = 0.0, ballCost = 0.0, routeCost = 0.0;
+      int sumP = 0;
+      int sumL = 0;
+      IloAlgorithm::Status status = cplex.getStatus();
       // Solve
       if(!cplex.solve())
         {
-          cout << "can't solve'" << endl;
-          throw(-1);
-        }
+          status = cplex.getStatus();
+          LB = cplex.getBestObjValue();
+          totalTime = cplex.getTime();
 
-      cout << "P: ";
-      int sumP = 0;
-      for(auto i = 0; i < N; i++)
-        {
-          sumP += cplex.getValue(P[i]);
-          cout << cplex.getValue(P[i]) << " ";
-        }
-      cout << endl;
-
-      cout << "L: ";
-      int sumL = 0;
-      for(auto i = 0; i < N; i++)
-        {
-          sumL += cplex.getValue(L[i]);
-          cout << cplex.getValue(L[i]) << " ";
-        }
-      cout << endl;
-
-      cout << "y: ";
-      for(auto i = 0; i < WD; i++)
-        cout << cplex.getValue(y[i]) << " ";
-      cout << endl;
-
-      int watchtowers = 0, ewatchtowers = 0, ballons = 0, nDrones = 0;
-      float wtCost = 0.0, ballCost = 0.0, routeCost = 0.0;
-      // count ballons
-      for(auto i = 0; i < D; i++)
-        {
-          if(cplex.getValue(y[i]) > 0.9)
-            {
-              ballons++;
-              ballCost += techCost[1];
-            }
-        }
-      // count existing watchtowers
-      for(auto i = D; i < D + We; i++)
-        if(cplex.getValue(y[i]) > 0.9)
-          ewatchtowers++;
-      // count watchtowers
-      for(auto i = D + We; i < WD; i++)
-        {
-          if(cplex.getValue(y[i]) > 0.9)
-            {
-              watchtowers++;
-              wtCost += techCost[0];
-            }
-        }
-      cout << "x: " << endl;
-      for(auto i = D; i < V; i++)
-        {
-          for(auto j = D; j < V; j++)
-            {
-              if(cplex.getValue(x[i][j]) > 0.9)
-                {
-                  routeCost += t[i][j] * costUAV;
-                  cout << "x[" << i << "][" << j << "] = "<< cplex.getValue(x[i][j]) << " -> " << t[i][j] << endl;
-                  if(i < WD)
-                    nDrones++;
-                }
-            }
-        }
-
-      cout << "v: ";
-      for(auto i = 0; i < S; i++)
-        cout << cplex.getValue(v[i]) << " ";
-      cout << endl;
-
-      if(opt % 2 == 0)
-        {
-          cout << "u: ";
-          for(auto i = D; i < V; i++)
-            cout << cplex.getValue(u[i]) << " ";
-          cout << endl;
+          cout << "Can't solve" << endl;
+          cout << "Status = " << status << endl;
+          cout << "LB     = " << LB << endl;
+          cout << "time   = " << totalTime << endl;
         }
       else
         {
-          cout << "g: " << endl;
+          cout << "P: ";
+          for(auto i = 0; i < N; i++)
+            {
+              sumP += cplex.getValue(P[i]);
+              cout << cplex.getValue(P[i]) << " ";
+            }
+          cout << endl;
+
+          cout << "L: ";
+
+          for(auto i = 0; i < N; i++)
+            {
+              sumL += cplex.getValue(L[i]);
+              cout << cplex.getValue(L[i]) << " ";
+            }
+          cout << endl;
+
+          cout << "y: ";
+          for(auto i = 0; i < WD; i++)
+            cout << cplex.getValue(y[i]) << " ";
+          cout << endl;
+
+          // count ballons
+          for(auto i = 0; i < D; i++)
+            {
+              if(cplex.getValue(y[i]) > 0.9)
+                {
+                  ballons++;
+                  ballCost += techCost[1];
+                }
+            }
+          // count existing watchtowers
+          for(auto i = D; i < D + We; i++)
+            if(cplex.getValue(y[i]) > 0.9)
+              ewatchtowers++;
+          // count watchtowers
+          for(auto i = D + We; i < WD; i++)
+            {
+              if(cplex.getValue(y[i]) > 0.9)
+                {
+                  watchtowers++;
+                  wtCost += techCost[0];
+                }
+            }
+          cout << "x: " << endl;
           for(auto i = D; i < V; i++)
             {
               for(auto j = D; j < V; j++)
                 {
-                  if(i != j && cplex.getValue(g[i][j]) > 0.9)
+                  if(cplex.getValue(x[i][j]) > 0.9)
                     {
-                      cout << "g[" << i << "][" << j << "] = "<< cplex.getValue(g[i][j]) << endl;
+                      routeCost += t[i][j] * costUAV;
+                      cout << "x[" << i << "][" << j << "] = "<< cplex.getValue(x[i][j]) << " -> " << t[i][j] << endl;
+                      if(i < WD)
+                        nDrones++;
                     }
                 }
             }
+
+          cout << "v: ";
+          for(auto i = 0; i < S; i++)
+            cout << cplex.getValue(v[i]) << " ";
+          cout << endl;
+
+          if(opt % 2 == 0)
+            {
+              cout << "u: ";
+              for(auto i = D; i < V; i++)
+                cout << cplex.getValue(u[i]) << " ";
+              cout << endl;
+            }
+          else
+            {
+              cout << "g: " << endl;
+              for(auto i = D; i < V; i++)
+                {
+                  for(auto j = D; j < V; j++)
+                    {
+                      if(i != j && cplex.getValue(g[i][j]) > 0.9)
+                        {
+                          cout << "g[" << i << "][" << j << "] = "<< cplex.getValue(g[i][j]) << endl;
+                        }
+                    }
+                }
+            }
+
+          LB = cplex.getBestObjValue();
+          totalTime = cplex.getTime();
+          DroneCost = nDrones * techCost[3];
+
+          totalCost = wtCost + DroneCost + ballCost;
+
+          if(opt > 3)
+            totalCost += routeCost;
+          totalCover = sumL + sumP;
+          gap = ((cplex.getStatus() == IloAlgorithm::Optimal) ? 0 : cplex.getMIPRelativeGap() * 100);
+
+          cout << "Instance            = " << nameInstance << endl;
+          cout << "T                   = " << T << endl;
+          cout << "LB                  = " << LB << endl;
+          cout << "Total Cost          = " << totalCost << " " << cplex.getObjValue() << endl;
+          if(opt > 3)
+            cout << "Total Cost w/o RC   = " << totalCost - routeCost << endl;
+          cout << "Route Cost          = " << routeCost << endl;
+          cout << "Watchtowers Cost    = " << wtCost << endl;
+          cout << "Ballons Cost        = " << ballCost << endl;
+          cout << "Drones Cost         = " << DroneCost << endl;
+          cout << "Drone number        = " << nDrones << endl;
+          cout << "existing WT number  = " << ewatchtowers << endl;
+          cout << "Watchtowers number  = " << watchtowers << endl;
+          cout << "Ballons number      = " << ballons << endl;
+          cout << "Covering            = " << totalCover << endl;
+          cout << "Covering by Facili. = " << sumL << endl;
+          cout << "Covering by Drones  = " << sumP << endl;
+          cout << "Time                = " << totalTime << endl;
+          cout << "Status              = " << status << endl;
+          cout << "GAP (%)             = " << gap << endl;
         }
-
-      float LB = cplex.getBestObjValue();
-      float totalTime = cplex.getTime();
-      float DroneCost = nDrones * techCost[3];
-
-      float totalCost = wtCost + DroneCost + ballCost;
-
-      if(opt > 3)
-        totalCost += routeCost;
-      int totalCover = sumL + sumP;
-      float gap = ((cplex.getStatus() == IloAlgorithm::Optimal) ? 0 : cplex.getMIPRelativeGap() * 100);
-      IloAlgorithm::Status status = cplex.getStatus();
-
-      cout << "Instance            = " << nameInstance << endl;
-      cout << "T                   = " << T << endl;
-      cout << "LB                  = " << LB << endl;
-      cout << "Total Cost          = " << totalCost << " " << cplex.getObjValue() << endl;
-      if(opt > 3)
-        cout << "Total Cost w/o RC   = " << totalCost - routeCost << endl;
-      cout << "Route Cost          = " << routeCost << endl;
-      cout << "Watchtowers Cost    = " << wtCost << endl;
-      cout << "Ballons Cost        = " << ballCost << endl;
-      cout << "Drones Cost         = " << DroneCost << endl;
-      cout << "Drone number        = " << nDrones << endl;
-      cout << "existing WT number  = " << ewatchtowers << endl;
-      cout << "Watchtowers number  = " << watchtowers << endl;
-      cout << "Ballons number      = " << ballons << endl;
-      cout << "Covering            = " << totalCover << endl;
-      cout << "Covering by Facili. = " << sumL << endl;
-      cout << "Covering by Drones  = " << sumP << endl;
-      cout << "Time                = " << totalTime << endl;
-      cout << "Status              = " << status << endl;
-      cout << "GAP (%)             = " << gap << endl;
-
       FILE *file;
       stringstream ss;
       string s;
       string path = "output/";
       string output = path + "summary_" + to_string(opt) + ".txt";
+      status = cplex.getStatus();
       ss << status;
       ss >> s;
       if((file = fopen(output.c_str(), "a")) == NULL)
