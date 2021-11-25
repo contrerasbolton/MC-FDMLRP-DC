@@ -230,7 +230,7 @@ void solveMILP(int opt)
           for(auto i = D; i < V; i++)
             {
               name << "u_" << i;
-              u[i] = IloNumVar(env, 0, IloInfinity, IloNumVar::Float, name.str().c_str());
+              u[i] = IloNumVar(env, 0, T, IloNumVar::Float, name.str().c_str());
               name.str("");
             }
         }
@@ -473,7 +473,7 @@ void solveMILP(int opt)
                   if(i != j)
                     {
                       name << "constraint11_" << i << " " << j;
-                      constraint11[c][j] = IloRange(env, -IloInfinity, u[i] - u[j] + t[i][j] - T * (1 - x[i][j]), 0, name.str().c_str());
+                      constraint11[c][j] = IloRange(env, -IloInfinity, u[i] - u[j] + t[i][j] - 2 * T * (1 - x[i][j]), 0, name.str().c_str());
                       name.str("");
                       model.add(constraint11[c][j]);
                     }
@@ -684,7 +684,7 @@ void solveMILP(int opt)
         model.add(x[i][i] == 0);
 
       // Cplex Parameters
-      //cplex.exportModel("model.lp");
+      // cplex.exportModel("model.lp");
       cplex.setParam(IloCplex::Param::Threads, 1);
       cplex.setParam(IloCplex::Param::TimeLimit, timeLimit);
       cplex.setParam(IloCplex::Param::MIP::Limits::TreeMemory, memoryLimit);
@@ -801,7 +801,7 @@ void solveMILP(int opt)
           LB = cplex.getBestObjValue();
           totalTime = cplex.getTime();
           DroneCost = nDrones * techCost[3];
-
+          status = cplex.getStatus();
           totalCost = wtCost + DroneCost + ballCost;
 
           if(opt > 3)
