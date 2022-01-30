@@ -31,6 +31,7 @@ private:
   vector<vector<int> > beta;
   vector<vector<int> > bi;
   unsigned decipresi;
+  double timeCplex;
 
   // Parameters
   unsigned E;  // size of elite solutions
@@ -70,12 +71,17 @@ private:
 public:
   default_random_engine generator;
   uniform_real_distribution<double> randValue;
+  string nameAlgorithm;
+  // results data
+  float initialCost;
+  float costFinal;
+  float timeF;
   // function
   ILS(int seed, int N, int D, int We, int W, int S, int B, int **bo, int ND, float T, int V, float M,
       vector<vector<int> > &b, vector<vector<int> > &bi,  float **t, int *mMax, int *mMin, float **C, float costUAV, float *parameters);
   virtual ~ILS();
-  void run(float *result);
-  void runMH(float *result);
-
+  void run();
+  void runMH();
+  void printOutput(string Instance);
 };
 #endif /* _ILS_H_ */

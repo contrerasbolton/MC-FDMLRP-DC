@@ -12,6 +12,11 @@ start=0
 end=0
 startSeed=0
 endSeed=0
+if [ "$TYPE" = "" ] && [ "$INSTANCE" = "" ] && [ "$I" = "" ] && [ "$J" = "" ] && [ "$time" = "" ] && [ "$memory" = "" ]
+then
+	echo "format: ./run algorithm instance [instance_i] [instance_j] [time] [memory]"
+	exit
+fi
 if [ "$TYPE" = "M1-MTZ" ]
 then
     algorithm=0

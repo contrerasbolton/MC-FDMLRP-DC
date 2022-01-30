@@ -171,6 +171,7 @@ void readInstance(const char *instance)
 
 void solveMILP(int opt)
 {
+  string nameAlgorithm;
   IloEnv env;
   try
     {
@@ -463,6 +464,7 @@ void solveMILP(int opt)
       // MTZ
       if(opt % 2 == 0)
         {
+          nameAlgorithm = "MTZ Formulation";
           // Constraints 11) u_i + t_{ij} < = u_j + Q * (1 - x_{ji}), for all i in S, j in V, i != j
           IloArray<IloRangeArray>  constraint11(env, V);
           for(auto i = WD, c = 0; i < V; i++, c++)
@@ -506,6 +508,7 @@ void solveMILP(int opt)
         }
       else // GG
         {
+          nameAlgorithm = "GG Formulation";
           // Constraints 11) \Sum_{j in V} g_{ij} - \Sum_{j in V} g_{ji} == \Sum_{j in V} t_{ij} * x_{ij}, for all i in S,x i != j
           IloRangeArray  constraint11(env, S);
           for(auto i = WD, c = 0; i < V; i++, c++)
@@ -809,6 +812,7 @@ void solveMILP(int opt)
           totalCover = sumL + sumP;
           gap = ((cplex.getStatus() == IloAlgorithm::Optimal) ? 0 : cplex.getMIPRelativeGap() * 100);
 
+          cout << "Approach            = " << nameAlgorithm << endl;
           cout << "Instance            = " << nameInstance << endl;
           cout << "T                   = " << T << endl;
           cout << "LB                  = " << LB << endl;
@@ -861,7 +865,6 @@ void callILS(int opt)
 {
   cout << "ILS is running" << endl;
   // initial cost, cost obtained, computing time
-  float result[3] = {0.0, 0.0, 0.0};
   float *parameters = new float[11];
   parameters[0] = 30;
   parameters[1] = 500000;
@@ -877,9 +880,9 @@ void callILS(int opt)
   parameters[11] = 10;
 
   ILS *ils = new ILS(seed, N, D, We, W, S, B, beta, ND, T, V, distSum, b, bi, t, mMax, mMin, C, costUAV, parameters);
-  ils->run(&result[0]);
-  delete ils;
-  cout << result[0] << "\t" << result[1] << "\t" << result[2] << endl;
+  ils->run();
+  ils->printOutput(nameInstance);
+  cout << ils->initialCost << "\t" << ils->costFinal << "\t" << ils->timeF << endl;
   FILE *file;
   stringstream ss;
   string s;
@@ -890,14 +893,14 @@ void callILS(int opt)
       printf("Error in reading of the %s \n", output.c_str());
       exit(0);
     }
-  fprintf(file, "%s\t%f\t%f\t%f\t\n", nameInstance.c_str(), result[0], result[1], result[2]);
+  fprintf(file, "%s\t%f\t%f\t%f\t\n", nameInstance.c_str(), ils->initialCost, ils->costFinal, ils->timeF);
+  delete ils;
   fclose(file);
 }
 
 void callMatheuristic(int opt)
 {
   cout << "Matheuristic is running" << endl;
-  float result[3] = {0.0, 0.0, 0.0};
   float *parameters = new float[11];
   parameters[0] = 30;
   parameters[1] = 500000;
@@ -913,9 +916,9 @@ void callMatheuristic(int opt)
   parameters[11] = 10;
 
   ILS *ils = new ILS(seed, N, D, We, W, S, B, beta, ND, T, V, distSum, b, bi, t, mMax, mMin, C, costUAV, parameters);
-  ils->runMH(&result[0]);
-  delete ils;
-  cout << result[0] << "\t" << result[1] << "\t" << result[2] << endl;
+  ils->runMH();
+  ils->printOutput(nameInstance);
+  cout << ils->initialCost << "\t" << ils->costFinal << "\t" << ils->timeF << endl;
   FILE *file;
   stringstream ss;
   string s;
@@ -926,7 +929,8 @@ void callMatheuristic(int opt)
       printf("Error in reading of the %s \n", output.c_str());
       exit(0);
     }
-  fprintf(file, "%s\t%f\t%f\t%f\t\n", nameInstance.c_str(), result[0], result[1], result[2]);
+  fprintf(file, "%s\t%f\t%f\t%f\t\n", nameInstance.c_str(), ils->initialCost, ils->costFinal, ils->timeF);
+  delete ils;
   fclose(file);
 }
 
