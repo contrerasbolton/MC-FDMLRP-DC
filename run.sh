@@ -39,7 +39,11 @@ elif [ "$TYPE" = "MH" ]
 then
     algorithm=6
     endSeed=9
-elif [ "$TYPE" = "MH2" ]
+elif [ "$TYPE" = "M1" ]
+then
+    algorithm=8
+    endSeed=9
+elif [ "$TYPE" = "M2" ]
 then
     algorithm=7
     endSeed=9

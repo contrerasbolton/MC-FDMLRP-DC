@@ -80,8 +80,8 @@ public:
   ILS(int seed, int N, int D, int We, int W, int S, int B, int **bo, int ND, float T, int V, float M,
       vector<vector<int> > &b, vector<vector<int> > &bi,  float **t, int *mMax, int *mMin, float **C, float costUAV, float *parameters);
   virtual ~ILS();
-  void run();
-  void runMH();
+  void run(int timeLimitAlgorithm, int variant);
+  void runMH(int timeLimitAlgorithm);
   void printOutput(string Instance);
 };
 #endif /* _ILS_H_ */

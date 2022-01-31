@@ -861,9 +861,8 @@ void solveMILP(int opt)
   env.end();
 }
 
-void callILS(int opt)
+void callMH(int opt, int variant)
 {
-  cout << "ILS is running" << endl;
   // initial cost, cost obtained, computing time
   float *parameters = new float[11];
   parameters[0] = 30;
@@ -879,14 +878,22 @@ void callILS(int opt)
   parameters[10] = 0.6;
   parameters[11] = 10;
 
+  if(variant)
+    {
+      opt = 8;
+      cout << "M2 is running" << endl;
+    }
+  else
+    cout << "metaheuristic is running" << endl;
   ILS *ils = new ILS(seed, N, D, We, W, S, B, beta, ND, T, V, distSum, b, bi, t, mMax, mMin, C, costUAV, parameters);
-  ils->run();
+  ils->run(timeLimit, variant);
   ils->printOutput(nameInstance);
   cout << ils->initialCost << "\t" << ils->costFinal << "\t" << ils->timeF << endl;
   FILE *file;
   stringstream ss;
   string s;
   string path = "output/";
+
   string output = path + "summary_" + to_string(opt) + ".txt";
   if((file = fopen(output.c_str(), "a")) == NULL)
     {
@@ -898,9 +905,8 @@ void callILS(int opt)
   fclose(file);
 }
 
-void callMatheuristic(int opt)
+void callM1(int opt)
 {
-  cout << "Matheuristic is running" << endl;
   float *parameters = new float[11];
   parameters[0] = 30;
   parameters[1] = 500000;
@@ -914,9 +920,9 @@ void callMatheuristic(int opt)
   parameters[9] = 0.2;
   parameters[10] = 0.6;
   parameters[11] = 10;
-
+  cout << "M1 is running" << endl;
   ILS *ils = new ILS(seed, N, D, We, W, S, B, beta, ND, T, V, distSum, b, bi, t, mMax, mMin, C, costUAV, parameters);
-  ils->runMH();
+  ils->runMH(timeLimit);
   ils->printOutput(nameInstance);
   cout << ils->initialCost << "\t" << ils->costFinal << "\t" << ils->timeF << endl;
   FILE *file;
@@ -955,12 +961,14 @@ int main(int argc, char *argv[])
   readInstance(name.c_str());
 
   // Call algorithms
-  if(opt == 7)
-    callMatheuristic(opt);
-  else if(opt == 6)
-    callILS(opt);
+  if(opt == 6)
+    callMH(opt, 0); // matheuristic
+  else if(opt == 7)
+    callM1(opt);   // M1 algorithm
+  else if(opt == 8)
+    callMH(opt, 1); // M2 algorithm
   else
-    solveMILP(opt);
+    solveMILP(opt); // solve model
 
   // Free memory
   delete [] mMin;

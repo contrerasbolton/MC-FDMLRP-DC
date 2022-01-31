@@ -522,7 +522,7 @@ bool ILS::initialSolution(Solution &s)
 float ILS::coveringSolver(Solution &s, float add)
 {
   IloEnv env;
-
+  int iter = 1;
   // All locations are fixed to 1
   for(auto i = 0; i < WD; i++)
     s.Sd[i] = 1;
@@ -920,15 +920,62 @@ float ILS::coveringSolver(Solution &s, float add)
       cplex2.setParam(IloCplex::Param::TimeLimit, timeCplex);
       cplex2.setOut(env.getNullStream());
       cplex2.setParam(IloCplex::Param::MIP::Display, 0);
+      int routingCost = 0;
+      cout << "2) Solving the multi-depot routing problem with minimum number of nodes with sigma = " << add << endl;
       if(!cplex2.solve())
         {
-          cout << "can't solve, we tried with " << add << endl;
+          do {
+            iter += 1;
+            add += 0.1;
+            cout << "UB = " << routingCost << ", LB = " << cplex2.getBestObjValue() << ", time = " << routingTime << endl;
+            cout << "can't solve, we tried with sigma " << add << endl;
+            cout << "2) Solving the multi-depot routing problem with minimum number of nodes with sigma = " << add << endl;
+
+            for(auto i = D; i < V2; i++)
+              {
+                //constraint13b[i] = IloRangeArray(env, WD);
+                for(auto j = D; j < WD; j++)
+                  {
+                    if(i != j)
+                      {
+                        // name << "constraint13_UB_" << i << "_" << j;
+                        // constraint13b[i][j] = IloRange(env, -IloInfinity, g[i][j] - x[i][j] * (T + add), 0, name.str().c_str());
+                        // name.str("");
+                        model2.remove(constraint13b[i][j]);
+                      }
+                  }
+              }
+
+            for(auto i = D; i < V2; i++)
+              {
+                constraint13b[i] = IloRangeArray(env, WD);
+                for(auto j = D; j < WD; j++)
+                  {
+                    if(i != j)
+                      {
+                        name << "constraint13_UB_" << i << "_" << j;
+                        constraint13b[i][j] = IloRange(env, -IloInfinity, g[i][j] - x[i][j] * (T + add), 0, name.str().c_str());
+                        name.str("");
+                        model2.add(constraint13b[i][j]);
+                      }
+                  }
+              }
+            if(add > 2.0)
+              {
+                env.end();
+                return iter;
+              }
+          }
+          while(!cplex2.solve());
+
+          routingCost = cplex2.getObjValue();
+          routingTime = cplex2.getTime();
+          cout << "UB = " << routingCost << ", LB = " << cplex2.getBestObjValue() << ", time = " << routingTime << endl;
           env.end();
-          return false;
+          return iter;
         }
-      int routingCost = cplex2.getObjValue();
+      routingCost = cplex2.getObjValue();
       routingTime = cplex2.getTime();
-      cout << "2) Solving the multi-depot routing problem with minimum number of nodes:";
       cout << "UB = " << routingCost << ", LB = " << cplex2.getBestObjValue() << ", time = " << routingTime << endl;
 
       for(auto i = D; i < V2; i++)
@@ -942,6 +989,7 @@ float ILS::coveringSolver(Solution &s, float add)
                 }
             }
         }
+
       vector<bool> check(V, true);
       // for(auto c = 0; c < WD * 2; c++)
       //   s.Ss[c].clear();
@@ -996,7 +1044,7 @@ float ILS::coveringSolver(Solution &s, float add)
       // computeCost(s);
       // print_sol(s);
       env.end();
-      return true;
+      return iter;
     } catch (IloException& ex) {
     cerr << "Error: " << ex << endl;
     exit(0);
@@ -1005,7 +1053,7 @@ float ILS::coveringSolver(Solution &s, float add)
     cerr << "Error" << endl;
   }
   env.end();
-  return true;
+  return iter;
 }
 
 float ILS::solver(vector<int> &initial, float currentUB, float timeLimit, Solution &s, bool flag, bool initSol, bool original, int tries, bool fixed)
@@ -2328,9 +2376,10 @@ void ILS::updateElite(Solution &s1, float cost)
     }
 }
 
-void ILS::runMH()
+void ILS::runMH(int timeLimitAlgorithm)
 {
   nameAlgorithm = "Simple-Matheuristic";
+  cout << "Algorithm time limit = " << timeLimitAlgorithm << endl;
   cout << endl << nameAlgorithm << " starts" << endl;
 
   int iterMax = 10;
@@ -2340,13 +2389,8 @@ void ILS::runMH()
   Solution sBest = Solution();
   vector<int> initial(WD, 1);
   // build initial solution
-  float add = 0;
-  int nTimes = 0;
-  while(!coveringSolver(s, add))
-    {
-      add += 0.1;
-      nTimes++;
-    }
+  cout << "Initial solution starts" << endl;
+  int nTimes = coveringSolver(s, 0);
 
   float currentCost = computeCost(s);
   cout << "Initial solution needed: " << nTimes << " iterations" << endl;
@@ -2362,10 +2406,18 @@ void ILS::runMH()
     }
 
   initialCost = costFinal = currentCost;
+  cout << "Initial solution ends" << endl;
 
   auto start = chrono::steady_clock::now();
   for(auto iter = 0; iter < iterMax; iter++)
     {
+      auto end = chrono::steady_clock::now();
+      auto diff = end - start;
+      auto totalTime  = chrono::duration <double, std::ratio<1>> (diff).count();
+      // cout << totalTime << endl;
+      if(totalTime > timeLimitAlgorithm)
+        break;
+
       vector<int> Sd(WD);
       for(auto i = 0; i < WD; i++)
         Sd[i] = s.Sd[i];
@@ -2387,9 +2439,10 @@ void ILS::runMH()
   timeF = totalTime;
 }
 
-void ILS::run()
+void ILS::run(int timeLimitAlgorithm, int variant)
 {
   nameAlgorithm = "Matheuristic";
+  cout << "Algorithm time limit = " << timeLimitAlgorithm << endl;
   cout << endl << nameAlgorithm << " starts" << endl;
 
   auto start = chrono::steady_clock::now();
@@ -2397,18 +2450,10 @@ void ILS::run()
   Solution s(N, V, WD);
   Solution sBest = Solution();
   Solution sBestBest = Solution();
-  // Solution sBest(N, V, WD);
-  // Solution sBestBest(N, V, WD);
-  float add = 0;
-  int nTimes = 0;
   // build initial solution
   cout << "Initial solution starts" << endl;
-  while(!coveringSolver(s, add))
-    {
-      add += 0.1;
-      nTimes++;
-    }
-  cout << "Initial solution ends" << endl;
+  int nTimes = coveringSolver(s, 0);
+
   float s_cost = computeCost(s);
   vector<int> initial(WD, 1);
   cout << "Initial solution needed: " << nTimes << " iterations" << endl;
@@ -2422,6 +2467,7 @@ void ILS::run()
       s_cost = computeCost(s);
       cout << "Initial Cost: " << s_cost << endl;
     }
+  cout << "Initial solution ends" << endl;
 
   float s_bestCost = Infinity;
   float s_bestBestCost = Infinity;
@@ -2437,8 +2483,18 @@ void ILS::run()
   initialCost = s_bestBestCost;
   float increaseTime = Tc;
   float alpha = 0;
+  if(timeLimitAlgorithm != -1)
+    Kt = 999999999;
+  if(variant)
+    Km = 999999999;
   for(unsigned iter = 1; iter < Kt; iter++)
     {
+      auto end = chrono::steady_clock::now();
+      auto diff = end - start;
+      auto totalTime  = chrono::duration <double, std::ratio<1>> (diff).count();
+      // cout << totalTime << endl;
+      if(totalTime > timeLimitAlgorithm)
+        break;
       if(iter % 20000 == 0)
         cout << "iter " << iter << endl;
       // Perturbations
@@ -2479,12 +2535,12 @@ void ILS::run()
           s_bestCost = s_cost;
           sBest = s;
         }
-      else if(!s.feasible && iter % Kl == 0)  // Local Reset
+      else if(iter % Kl == 0)  // Local Reset
         {
           initialSolution(s);
           s_cost = computeCost(s);
         }
-      else if(!s.feasible && elite.size()) // reject solution if is infeasible
+      else if(!s.feasible && elite.size()) // Acceptance criterion: reject solution if is infeasible
         {
           map<float, Solution>::iterator it = elite.begin();
           int position = rnd(0, elite.size() - 1);
@@ -2516,7 +2572,7 @@ void ILS::run()
 
           s_cost = computeCost(s);
         }
-      else if(iter % Kg == 0) // reset general
+      else if(iter % Kg == 0) // Global reset
         {
           cout << "Intensification" << endl;
           // Intensification
