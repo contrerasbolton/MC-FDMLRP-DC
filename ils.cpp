@@ -2381,8 +2381,12 @@ void ILS::runMH(int timeLimitAlgorithm)
   nameAlgorithm = "Simple-Matheuristic";
   cout << "Algorithm time limit = " << timeLimitAlgorithm << endl;
   cout << endl << nameAlgorithm << " starts" << endl;
-
   int iterMax = 10;
+  if(timeLimitAlgorithm != -1)
+    iterMax = 999999999;
+  else
+    timeLimitAlgorithm = 999999999;
+
   float timelimit = 10;
 
   Solution s(N, V, WD);
@@ -2445,6 +2449,14 @@ void ILS::run(int timeLimitAlgorithm, int variant)
   cout << "Algorithm time limit = " << timeLimitAlgorithm << endl;
   cout << endl << nameAlgorithm << " starts" << endl;
 
+  if(timeLimitAlgorithm != -1)
+    Kt = 999999999;
+  else
+    timeLimitAlgorithm = 999999999;
+
+  if(variant)
+    Km = 999999999;
+
   auto start = chrono::steady_clock::now();
 
   Solution s(N, V, WD);
@@ -2483,10 +2495,7 @@ void ILS::run(int timeLimitAlgorithm, int variant)
   initialCost = s_bestBestCost;
   float increaseTime = Tc;
   float alpha = 0;
-  if(timeLimitAlgorithm != -1)
-    Kt = 999999999;
-  if(variant)
-    Km = 999999999;
+
   for(unsigned iter = 1; iter < Kt; iter++)
     {
       auto end = chrono::steady_clock::now();

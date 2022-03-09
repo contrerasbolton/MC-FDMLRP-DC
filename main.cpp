@@ -864,7 +864,7 @@ void solveMILP(int opt)
 void callMH(int opt, int variant)
 {
   // initial cost, cost obtained, computing time
-  float *parameters = new float[11];
+  float *parameters = new float[12];
   parameters[0] = 30;
   parameters[1] = 500000;
   parameters[2] = 50000;
@@ -907,7 +907,7 @@ void callMH(int opt, int variant)
 
 void callM1(int opt)
 {
-  float *parameters = new float[11];
+  float *parameters = new float[12];
   parameters[0] = 30;
   parameters[1] = 500000;
   parameters[2] = 50000;
