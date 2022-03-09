@@ -2158,7 +2158,7 @@ bool ILS::twoOpt(vector <int> &s)
     return false;
   float diff = 0;
   bool improve = false;
-  int depot = s[0];
+  // int depot = s[0];
   for(unsigned i = 0; i < s.size(); i++)
     {
       for(unsigned j = i + 2; j < s.size() - 1; j++)
@@ -2172,11 +2172,11 @@ bool ILS::twoOpt(vector <int> &s)
             }
         }
     }
-  if(depot != s[0])
-    {
-      cout << "must fix the depot at begin" << endl;
-      exit(0);
-    }
+  // if(depot != s[0])
+  //   {
+  //     cout << "must fix the depot at begin" << endl;
+  //     exit(0);
+  //   }
 
   if(improve)
     return true;
@@ -2224,14 +2224,15 @@ float ILS::computeCost(Solution &s)
 
   for(unsigned i = D * 2; i < s.Ss.size(); i++)
     {
-      // if(s.Ss[i].size() > 0 && s.Sd[i / 2] != 1)
-      //   {
-      //     cout << i << " " << s.Ss[i].size() << " " << s.Sd[i / 2]  << endl;
-
-      //     cout << "error this route is not watchtower" << endl;
-      //     print_sol(s);
-      //     exit(0);
-      //   }
+      if(s.Ss[i].size() > 0 && s.Sd[i / 2] != 1)
+        {
+          // cout << i << " " << s.Ss[i].size() << " " << s.Sd[i / 2]  << endl;
+          // to do: memory leak with cplex
+          // cout << "error this route is not watchtower" << endl;
+          // print_sol(s);
+          s.Sd[i / 2] = 1;
+          //exit(0);
+        }
 
       if(s.Ss[i].size())
         {
@@ -2249,25 +2250,25 @@ float ILS::computeCost(Solution &s)
               coveringAreaByNode(s, v);
               s.noInSs[u] = 1;
               s.noInSs[v] = 1;
-              if(s.Ss[i][j + 1] < WD)
-                {
-                  print_sol(s);
-                  cout << "error!!!!!!!!!!!!!!!!!!!!! it's a depot'" << endl;
-                  exit(0);
-                }
+              // if(s.Ss[i][j + 1] < WD)
+              //   {
+              //     print_sol(s);
+              //     cout << "error!!!!!!!!!!!!!!!!!!!!! it's a depot'" << endl;
+              //     exit(0);
+              //   }
             }
           u = s.Ss[i][s.Ss[i].size() - 2];
           v = s.Ss[i][s.Ss[i].size() - 1];
           s.noInSs[u] = 1;
           s.noInSs[v] = 1;
 
-          // Remove it after!
-          if(v != s.Ss[i][0])
-            {
-              print_sol(s);
-              cout << "error!!!!!!!!!!!!!!!!!!!!!" << endl;
-              exit(0);
-            }
+          // // Remove it after!
+          // if(v != s.Ss[i][0])
+          //   {
+          //     print_sol(s);
+          //     cout << "error!!!!!!!!!!!!!!!!!!!!!" << endl;
+          //     exit(0);
+          //   }
 
           // cout << u << " " << v << endl;
           routeCost += t[u][v];
@@ -2284,12 +2285,12 @@ float ILS::computeCost(Solution &s)
     if(!s.coveredArea[i])
       s.feasible = 0;
 
-  if(routeCost > 10000)
-    {
-      print_sol(s);
-      cout << "error big number !!!!!!!!!!!!!!!!!!!!!" << endl;
-      exit(0);
-    }
+  // if(routeCost > 10000)
+  //   {
+  //     print_sol(s);
+  //     cout << "error big number !!!!!!!!!!!!!!!!!!!!!" << endl;
+  //     exit(0);
+  //   }
 
   //print_sol(s);
   updateElite(s, s.cost);
