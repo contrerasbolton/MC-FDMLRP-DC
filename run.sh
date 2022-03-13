@@ -85,13 +85,19 @@ else
     exit
 fi
 
+if [ "$time" != "" ]
+then 
+    time="-t $time"
+fi
+
+fixed="-a 40 -b 500000 -c 20000 -d 25000 -e 500 -f 0.136 -g 0.298 -h 0.26 -j 0.039 -k 0.268 -l 0.766 -m 5"
 for i in `seq $start $end`;
 do
     for k in {1..2};
     do
         for seed in `seq $startSeed $endSeed`;
 		do
-		run="./drone $INSTANCE$i.$k.dat $algorithm $seed $time $memory"
+		run="./drone -i $INSTANCE$i.$k.dat -o $algorithm -s $seed $fixed $time"
 		echo "$seed $run > $OUTPUT$INSTANCE$i.$k"_"$TYPE.txt"
 		$run > $OUTPUT$INSTANCE$i.$k"_"$TYPE"_"$seed".txt"
 		done

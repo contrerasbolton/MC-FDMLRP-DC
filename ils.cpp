@@ -2231,6 +2231,7 @@ float ILS::computeCost(Solution &s)
           // cout << "error this route is not watchtower" << endl;
           // print_sol(s);
           s.Sd[i / 2] = 1;
+          s.feasible = 0;
           //exit(0);
         }
 

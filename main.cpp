@@ -1,6 +1,5 @@
 /* -*- Mode: C++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2; -*- */
 #include "ils.hpp"
-
 // Globals variables (parameters)
 int N;
 int We;
@@ -29,6 +28,23 @@ vector<vector<int> > bi; // inverse beta
 int seed;
 int timeLimit;
 int memoryLimit;
+int opt;
+float parameters[12];
+
+/**
+ * Usage format to run
+ */
+
+void usage()
+{
+  printf("FORMAT\n");
+  printf("usage default :\t./drone -i instance\n");
+  printf("usage default :\t./drone -i instance -o algorithm -t timeLimit -s seed\n");
+  printf("instance      :\tInstance name \n");
+  printf("Algorithm     :\t0 - 8 \n");
+  printf("timeLimit     :\tTime limit in seconds\n");
+  printf("seed     :\tRandom seed\n");
+}
 
 void printError(string msg)
 {
@@ -861,23 +877,124 @@ void solveMILP(int opt)
   env.end();
 }
 
+bool option(int argc, char *argv[])
+{
+  int op;
+  printf("arguments number: %d\n",argc);
+  for(int i = 1; i < argc; i++)
+    printf("%s ", argv[i]);
+
+  /* default value */
+  parameters[0] = 30;      // 1 e   -> a
+  parameters[1] = 500000;  // 2 Kt  -> b
+  parameters[2] = 50000;   // 3 Km  -> c
+  parameters[3] = 20000;   // 4 Kg  -> d
+  parameters[4] = 1000;    // 5 Kl  -> e
+  parameters[5] = 0.2;     // 6 p1  -> f
+  parameters[6] = 0.2;     // 7 p2  -> g
+  parameters[7] = 0.2;     // 8 p3  -> h
+  parameters[8] = 0.2;     // 9 p4  -> j
+  parameters[9] = 0.2;     // 10 p5 -> k
+  parameters[10] = 0.6;    // 11 w  -> l
+  parameters[11] = 10;     // 12 Tc -> m
+  timeLimit = -1;
+  seed = 0;
+  /* Reading the input arguments using getopt */
+  while((op = getopt(argc, argv, "i:o:s:t:a:b:c:d:e:f:g:h:j:k:l:m:")) != -1)
+    {
+      switch(op)
+        {
+        case 'i':
+          {
+            //   // nameInstance = argv[1]; // -i
+            char instance [100];
+            string folder = "instances/";
+            strcpy(instance, optarg);
+            nameInstance = instance;
+            string name = folder + nameInstance;
+            //   // Read instance
+            readInstance(name.c_str());
+            cout << instance << endl;
+            break;
+          }
+        case 't':
+          timeLimit = atoi(optarg);
+          if(timeLimit < -1)
+            {
+              printf("TimeLimit must be a postive number and greater than 0\n");
+              return false;
+            }
+          break;
+        case 's':
+          seed = atoi(optarg);
+          break;
+        case 'o':
+          opt = atoi(optarg);
+          if(opt < -1 || opt > 8)
+            {
+              printf("The algorithm must be between 1 and 8\n");
+              return false;
+            }
+          break;
+        case 'a':
+          parameters[0] = atof(optarg);
+          break;
+        case 'b':
+          parameters[1] = atof(optarg);
+          break;
+        case 'c':
+          parameters[2] = atof(optarg);
+          break;
+        case 'd':
+          parameters[3] = atof(optarg);
+          break;
+        case 'e':
+          parameters[4] = atof(optarg);
+          break;
+        case 'f':
+          parameters[5] = atof(optarg);
+          break;
+        case 'g':
+          parameters[6] = atof(optarg);
+          break;
+        case 'h':
+          parameters[7] = atof(optarg);
+          break;
+        case 'j':
+          parameters[8] = atof(optarg);
+          break;
+        case 'k':
+          parameters[9] = atof(optarg);
+          break;
+        case 'l':
+          parameters[10] = atof(optarg);
+          break;
+        case 'm':
+          parameters[11] = atof(optarg);
+          break;
+        case '?':
+          usage();
+          return false;
+          break;
+        default:
+          printf ("Unknown option character `\\x%x'.\n",  optopt);
+        }
+    }
+  if(optind < argc)
+    {
+      usage();
+      printf ("non-option ARGV-elements: ");
+      while (optind < argc)
+        printf ("%s ", argv[optind++]);
+      printf("\n");
+      return false;
+    }
+  return true;
+}
+
+
 void callMH(int opt, int variant)
 {
-  // initial cost, cost obtained, computing time
-  float *parameters = new float[12];
-  parameters[0] = 30;
-  parameters[1] = 500000;
-  parameters[2] = 50000;
-  parameters[3] = 20000;
-  parameters[4] = 1000;
-  parameters[5] = 0.2;
-  parameters[6] = 0.2;
-  parameters[7] = 0.2;
-  parameters[8] = 0.2;
-  parameters[9] = 0.2;
-  parameters[10] = 0.6;
-  parameters[11] = 10;
-
   if(variant)
     {
       opt = 8;
@@ -901,25 +1018,13 @@ void callMH(int opt, int variant)
       exit(0);
     }
   fprintf(file, "%s\t%f\t%f\t%f\t\n", nameInstance.c_str(), ils->initialCost, ils->costFinal, ils->timeF);
+  cout << "BBest " << ils->costFinal << endl;
   delete ils;
   fclose(file);
 }
 
 void callM1(int opt)
 {
-  float *parameters = new float[12];
-  parameters[0] = 30;
-  parameters[1] = 500000;
-  parameters[2] = 50000;
-  parameters[3] = 20000;
-  parameters[4] = 1000;
-  parameters[5] = 0.2;
-  parameters[6] = 0.2;
-  parameters[7] = 0.2;
-  parameters[8] = 0.2;
-  parameters[9] = 0.2;
-  parameters[10] = 0.6;
-  parameters[11] = 10;
   cout << "M1 is running" << endl;
   ILS *ils = new ILS(seed, N, D, We, W, S, B, beta, ND, T, V, distSum, b, bi, t, mMax, mMin, C, costUAV, parameters);
   ils->runMH(timeLimit);
@@ -944,21 +1049,9 @@ int main(int argc, char *argv[])
 {
   cout << "An heuristic for MC-FDMLRP-DC" << endl;
 
-  // Read arguments
-  string folder = "instances/";
-  nameInstance = argv[1];
-  string name = folder + nameInstance;
-  int opt = atoi(argv[2]);
-  seed = atoi(argv[3]);
-  timeLimit = atoi(argv[4]);
-  cout << name << endl;
-  if(argc > 5)
-    memoryLimit = atoi(argv[5]);
-  else
-    memoryLimit = 5000;
-
-  // Read instance
-  readInstance(name.c_str());
+  // validate the inputs
+  if(!option(argc, argv))
+    return 0;
 
   // Call algorithms
   if(opt == 6)
