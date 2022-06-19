@@ -82,6 +82,6 @@ public:
   virtual ~ILS();
   void run(int timeLimitAlgorithm, int variant);
   void runMH(int timeLimitAlgorithm);
-  void printOutput(string Instance);
+  void printOutput(int realInstance, string Instance, vector<int> mapDrone);
 };
 #endif /* _ILS_H_ */

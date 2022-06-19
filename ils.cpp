@@ -98,9 +98,19 @@ ILOMIPINFOCALLBACK5(timeLimitCallback,
   }
 }
 
-void ILS::printOutput(string nameInstance)
+void ILS::printOutput(int realInstance, string nameInstance, vector<int> mapDrone)
 {
+  if(!realInstance)
+    return;
   map<float, Solution>::iterator it = elite.begin();
+  FILE *file;
+  // stringstream ss;
+  // string s;
+  if((file = fopen(nameInstance.c_str(), "w")) == NULL)
+    {
+      printf("Error in reading of the %s \n", nameInstance.c_str());
+      exit(0);
+    }
 
   Solution s = it->second;
 
@@ -152,7 +162,10 @@ void ILS::printOutput(string nameInstance)
 
   int nDrones = 0;
   set<int> coverDrone;
-  for(unsigned i = 0; i < s.Ss.size(); i++)
+  for(int i = 0; i < 2 * D; i += 2)
+     fprintf(file, "%d %d\n", i / 2, s.Sd[i/2]);
+
+  for(unsigned i = 2 * D; i < s.Ss.size(); i++)
     {
       if(i % 2 == 0)
         {
@@ -160,6 +173,7 @@ void ILS::printOutput(string nameInstance)
         }
 
       cout << "\tRoute_" << i % 2 << " (" << i << "): ";
+      fprintf(file, "%d %d ", i / 2, s.Sd[i/2]);
       if(s.Ss[i].size())
         {
           nDrones++;
@@ -168,6 +182,8 @@ void ILS::printOutput(string nameInstance)
             {
               int node = s.Ss[i][j];
               cout << node << " ";
+              if(j > 0)
+                fprintf(file, "%d ", mapDrone[node - WD]);
               temp += t[node][s.Ss[i][j + 1]];
               if( j > 0 && j < s.Ss[i].size() - 1)
                 {
@@ -185,8 +201,14 @@ void ILS::printOutput(string nameInstance)
           cost += costUAV * temp + C[0][3];
         }
       cout << endl;
+      fprintf(file, "\n");
       //cout << i << endl;
     }
+
+
+  fclose(file);
+
+
   sumP = coverDrone.size();
   cout << "noInSs = ";
   for(auto i = WD; i < V; i++)
@@ -1745,7 +1767,7 @@ void ILS::perturbation2(Solution &s)
       int route = 0;
       do {
         route = rnd(0, s.Ss.size() - 1);
-      } while(s.Ss[route].size() == 0);
+      } while(s.Ss[route].size() < 3);
 
       int i = rnd(0, candidate.size() - 1);
       int r = rnd(1, s.Ss[route].size() - 2);

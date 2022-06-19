@@ -54,6 +54,8 @@ fi
 
 if [ "$INSTANCE" = "A" ]
 then
+    k1=1
+    k2=2
     if [ "$I" = "" ]
     then
 	start=1
@@ -68,6 +70,8 @@ then
     fi
 elif [ "$INSTANCE" = "B" ]
 then
+    k1=1
+    k2=3
     if [ "$I" = "" ]
     then
 	start=1
@@ -93,7 +97,7 @@ fi
 fixed="-a 40 -b 500000 -c 20000 -d 25000 -e 500 -f 0.136 -g 0.298 -h 0.26 -j 0.039 -k 0.268 -l 0.766 -m 5"
 for i in `seq $start $end`;
 do
-    for k in {1..2};
+    for k in `seq $k1 $k2`;
     do
         for seed in `seq $startSeed $endSeed`;
 		do

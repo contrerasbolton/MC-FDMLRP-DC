@@ -23,7 +23,8 @@ string nameInstance;
 vector<vector<vector<int> > > a; // eliminar
 vector<vector<int> > b; // simple beta
 vector<vector<int> > bi; // inverse beta
-
+vector<int> mapDrone;
+int realInstance;
 // Input parameters
 int seed;
 int timeLimit;
@@ -107,11 +108,32 @@ void readInstance(const char *instance)
             printError("reading error in t " + to_string(i) + " " + to_string(j));
         }
     }
+    // cout << "ready "<< V  << endl;
+  realInstance = 0;
+  if(fscanf(file, "%d", &temp))
+    {
+    // cout << temp << endl;
+      if(temp == -1)
+        {
+          realInstance = 1;
+          for(auto i = 0; i < S; i++)
+            {
+              if(!fscanf(file, "%d", &temp))
+                {
+                  printError("It is not real instance\n");
+                  break;
+                }
+              //cout << i << " " << temp << endl;
+              mapDrone.push_back(temp);
+            }
+        }
+    }
 
   cout << N << " " << D << " " << We << " " << W << " " << S << " " <<endl;
   cout << ND << " " << T << " " << mMin[0] << " " << mMax[0] << endl;
   cout << techCost[0] << " " << techCost[1] << " " << techCost[2] << " " << techCost[3] << endl;
   cout << "Node Type, id and areas that are covered:" << endl;
+
   for(auto i = 0; i < (int) b.size(); i++)
     {
       if(i < D)
@@ -180,6 +202,7 @@ void readInstance(const char *instance)
   //       cout << t[i][j] << " ";
   //     cout << endl;
   //   }
+
   costUAV = 0.02;
   cout << "reading is ok" << endl;
   fclose(file);
@@ -227,7 +250,7 @@ void solveMILP(int opt)
       for(auto i = 0; i < V; i++)
         {
           name << "w_" << i;
-          w[i] = IloNumVar(env, 0, IloInfinity, IloNumVar::Int, name.str().c_str());
+          w[i] = IloNumVar(env, 0, IloInfinity, IloNumVar::Float, name.str().c_str());
           name.str("");
         }
 
@@ -705,8 +728,10 @@ void solveMILP(int opt)
       // Cplex Parameters
       // cplex.exportModel("model.lp");
       cplex.setParam(IloCplex::Param::Threads, 1);
-      cplex.setParam(IloCplex::Param::TimeLimit, timeLimit);
-      cplex.setParam(IloCplex::Param::MIP::Limits::TreeMemory, memoryLimit);
+      if(timeLimit != -1)
+        cplex.setParam(IloCplex::Param::TimeLimit, timeLimit);
+      if(memoryLimit != -1)
+        cplex.setParam(IloCplex::Param::MIP::Limits::TreeMemory, memoryLimit);
       cplex.setParam(IloCplex::Param::MIP::Tolerances::MIPGap, 1e-07);
       //cplex.setParam(IloCplex::Param::Benders::Strategy, 3);
 
@@ -717,6 +742,7 @@ void solveMILP(int opt)
       int sumP = 0;
       int sumL = 0;
       IloAlgorithm::Status status = cplex.getStatus();
+
       // Solve
       if(!cplex.solve())
         {
@@ -898,9 +924,10 @@ bool option(int argc, char *argv[])
   parameters[10] = 0.6;    // 11 w  -> l
   parameters[11] = 10;     // 12 Tc -> m
   timeLimit = -1;
+  memoryLimit = -1;
   seed = 0;
   /* Reading the input arguments using getopt */
-  while((op = getopt(argc, argv, "i:o:s:t:a:b:c:d:e:f:g:h:j:k:l:m:")) != -1)
+  while((op = getopt(argc, argv, "i:o:s:t:a:b:c:d:e:f:g:h:j:k:l:m:n:")) != -1)
     {
       switch(op)
         {
@@ -922,6 +949,14 @@ bool option(int argc, char *argv[])
           if(timeLimit < -1)
             {
               printf("TimeLimit must be a postive number and greater than 0\n");
+              return false;
+            }
+          break;
+        case 'n':
+          memoryLimit = atoi(optarg);
+          if(memoryLimit < -1)
+            {
+              printf("MemoryLimit must be a postive number and greater than 0\n");
               return false;
             }
           break;
@@ -1004,14 +1039,16 @@ void callMH(int opt, int variant)
     cout << "metaheuristic is running" << endl;
   ILS *ils = new ILS(seed, N, D, We, W, S, B, beta, ND, T, V, distSum, b, bi, t, mMax, mMin, C, costUAV, parameters);
   ils->run(timeLimit, variant);
-  ils->printOutput(nameInstance);
-  cout << ils->initialCost << "\t" << ils->costFinal << "\t" << ils->timeF << endl;
+
   FILE *file;
   stringstream ss;
   string s;
   string path = "output/";
-
   string output = path + "summary_" + to_string(opt) + ".txt";
+
+  ils->printOutput(realInstance, path + nameInstance + "_" + to_string(seed) + ".txt", mapDrone);
+  cout << ils->initialCost << "\t" << ils->costFinal << "\t" << ils->timeF << endl;
+
   if((file = fopen(output.c_str(), "a")) == NULL)
     {
       printf("Error in reading of the %s \n", output.c_str());
@@ -1028,7 +1065,7 @@ void callM1(int opt)
   cout << "M1 is running" << endl;
   ILS *ils = new ILS(seed, N, D, We, W, S, B, beta, ND, T, V, distSum, b, bi, t, mMax, mMin, C, costUAV, parameters);
   ils->runMH(timeLimit);
-  ils->printOutput(nameInstance);
+  ils->printOutput(realInstance, nameInstance, mapDrone);
   cout << ils->initialCost << "\t" << ils->costFinal << "\t" << ils->timeF << endl;
   FILE *file;
   stringstream ss;
