@@ -20,7 +20,6 @@ int **beta;
 float **t;
 float distSum;
 string nameInstance;
-vector<vector<vector<int> > > a; // eliminar
 vector<vector<int> > b; // simple beta
 vector<vector<int> > bi; // inverse beta
 vector<int> mapDrone;

@@ -75,7 +75,7 @@ then
     if [ "$I" = "" ]
     then
 	start=1
-	end=5
+	end=2
     elif [ "$I" != "" ] && [ "$J" != "" ]
     then
 	start=$I
